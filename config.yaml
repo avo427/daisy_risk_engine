@@ -1,0 +1,90 @@
+user_settings:
+  years: 10
+  trading_days_per_year: 252
+  total_returns: true
+  random_state: 44
+  risk_free_rate: 0.05
+  starting_portfolio_value: 100000
+paths:
+  portfolio_weights: data/portfolio_weights.csv
+  raw_prices_output: data/yahoo_prices.csv
+  recon_prices_output: data/reconstructed_prices.csv
+  realized_output: data/realized_metrics.csv
+  forecast_output: data/forecast_metrics.csv
+loader:
+  excel_path: ../Portfolio.xlsm
+  sheet_name: Dashboard
+  named_ranges:
+    tickers: Portfolio_Tickers
+    weights: Portfolio_Weights
+    market_values: Portfolio_MarketValues
+  output_file: data/portfolio_weights.csv
+  versioned_output_dir: data/weights_versions/
+theme_proxies:
+  AI Compute & Hardware: SOXX
+  Cloud Infra & SaaS: WCLD
+  Cybersecurity: CIBR
+  Frontier / Deep Tech: ARKX
+  Disruptive / IPO Tech: ARKK
+  Consumer Growth Tech: FDN
+  Fintech & Crypto: ARKF
+  Global & EM Tech: EMQQ
+  Biotech / Genomics: ARKG
+  Value / Core Holdings: SPY
+  Energy Infrastructure: ICLN
+  Macro / Index Exposure: null
+  Crypto Exposure: BTC-USD
+  Cash Equivalent: BIL
+  
+ticker_themes:
+  ^VIX: Macro / Index Exposure
+  BTC-USD: Macro / Index Exposure
+  ETH-USD: Macro / Index Exposure
+  QQQ: Macro / Index Exposure
+  QQQM: Macro / Index Exposure
+  SPY: Macro / Index Exposure
+  TQQQ: Macro / Index Exposure
+  SPX: Macro / Index Exposure
+  NVDA: AI Compute & Hardware
+  AMD: AI Compute & Hardware
+  SMCI: AI Compute & Hardware
+  QCOM: AI Compute & Hardware
+  TSM: AI Compute & Hardware
+  VRT: AI Compute & Hardware
+  NVTS: AI Compute & Hardware
+  APLD: AI Compute & Hardware
+  NBIS: AI Compute & Hardware
+  CRWV: AI Compute & Hardware
+  SNOW: Cloud Infra & SaaS
+  CRM: Cloud Infra & SaaS
+  MDB: Cloud Infra & SaaS
+  ORCL: Cloud Infra & SaaS
+  APP: Cloud Infra & SaaS
+  DOMO: Cloud Infra & SaaS
+  U: Cloud Infra & SaaS
+  PANW: Cybersecurity
+  CRWD: Cybersecurity
+  NET: Cybersecurity
+  ASTS: Frontier / Deep Tech
+  RKLB: Frontier / Deep Tech
+  IONQ: Frontier / Deep Tech
+  QBTS: Frontier / Deep Tech
+  QUBT: Frontier / Deep Tech
+  RGTI: Frontier / Deep Tech
+  ACHR: Frontier / Deep Tech
+  RDDT: Disruptive / IPO Tech
+  OUST: Disruptive / IPO Tech
+  DJT: Disruptive / IPO Tech
+  CVNA: Disruptive / IPO Tech
+  GME: Disruptive / IPO Tech
+  META: Consumer Growth Tech
+  GOOGL: Consumer Growth Tech
+  SHOP: Consumer Growth Tech
+  TSLA: Consumer Growth Tech
+  UBER: Consumer Growth Tech
+  ULTY: Value / Core Holdings
+  BRK-B: Value / Core Holdings
+  IBIT: Crypto Exposure
+  SGOV: Cash Equivalent
+  
+fallback_proxy: ^NDX
