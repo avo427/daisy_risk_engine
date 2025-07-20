@@ -27,8 +27,10 @@ def compute_realized_metrics(config_path="config.yaml"):
     returns = price_df.pct_change().dropna()
 
     weights_df = pd.read_csv(config["paths"]["portfolio_weights"])
+    if "Ticker" not in weights_df.columns:
+        weights_df.reset_index(inplace=True)
     weights_df["Ticker"] = weights_df["Ticker"].str.upper()
-    weights_df = weights_df[weights_df["MarketValue"] > 0]  # ✅ Filter for positive positions
+    weights_df = weights_df[weights_df["MarketValue"] > 0]
 
     portfolio_tickers = list(weights_df["Ticker"])
     benchmark_tickers = ["^NDX", "^SPX"]
@@ -37,6 +39,7 @@ def compute_realized_metrics(config_path="config.yaml"):
     tickers = returns.columns
 
     weights = weights_df.set_index("Ticker")["Weight"].reindex(tickers).fillna(0)
+    portfolio_tickers = [t for t in portfolio_tickers if t in returns.columns]
     port_ret = (returns[portfolio_tickers] * weights[portfolio_tickers]).sum(axis=1)
 
     ndx_ret = returns["^NDX"] if "^NDX" in returns else None
@@ -52,22 +55,17 @@ def compute_realized_metrics(config_path="config.yaml"):
             downside_std = r[r < 0].std()
             sortino = ((r.mean() - rf_rate / annual_factor) / downside_std * np.sqrt(annual_factor)) if downside_std > 0 else np.nan
             sharpe = ((r.mean() - rf_rate / annual_factor) / r.std()) * np.sqrt(annual_factor) if r.std() > 0 else np.nan
-
             cum = (1 + r).cumprod()
             mdd = (cum / cum.cummax() - 1).min()
-
             var = np.percentile(r, 5)
             cvar = r[r <= var].mean()
             hit = (r > 0).mean()
             skewness = skew(r)
             kurt_val = kurtosis(r)
-
             beta_ndx = r.cov(ndx_ret) / ndx_ret.var() if ndx_ret is not None else np.nan
             beta_spx = r.cov(spx_ret) / spx_ret.var() if spx_ret is not None else np.nan
-
             upside = r[ndx_ret > 0].mean() / ndx_ret[ndx_ret > 0].mean() if ndx_ret is not None and (ndx_ret > 0).any() else np.nan
             downside = r[ndx_ret < 0].mean() / ndx_ret[ndx_ret < 0].mean() if ndx_ret is not None and (ndx_ret < 0).any() else np.nan
-
             track_err = np.std(r - ndx_ret) if ndx_ret is not None else np.nan
             info_ratio = ((r.mean() - ndx_ret.mean()) / track_err * np.sqrt(annual_factor)) if ndx_ret is not None and track_err != 0 else np.nan
 
@@ -94,7 +92,7 @@ def compute_realized_metrics(config_path="config.yaml"):
         except Exception as e:
             logging.warning(f"⚠️ Skipping metrics for {t}: {e}")
 
-    # Portfolio-level row
+    # Portfolio-level metrics
     try:
         r = port_ret.dropna()
         ann_return = (1 + r.mean()) ** annual_factor - 1
@@ -102,26 +100,21 @@ def compute_realized_metrics(config_path="config.yaml"):
         downside_std = r[r < 0].std()
         sortino = ((r.mean() - rf_rate / annual_factor) / downside_std * np.sqrt(annual_factor)) if downside_std > 0 else np.nan
         sharpe = ((r.mean() - rf_rate / annual_factor) / r.std()) * np.sqrt(annual_factor) if r.std() > 0 else np.nan
-
         cum = (1 + r).cumprod()
         mdd = (cum / cum.cummax() - 1).min()
-
         var = np.percentile(r, 5)
         cvar = r[r <= var].mean()
         hit = (r > 0).mean()
         skewness = skew(r)
         kurt_val = kurtosis(r)
-
         beta_ndx = r.cov(ndx_ret) / ndx_ret.var() if ndx_ret is not None else np.nan
         beta_spx = r.cov(spx_ret) / spx_ret.var() if spx_ret is not None else np.nan
-
         upside = r[ndx_ret > 0].mean() / ndx_ret[ndx_ret > 0].mean() if ndx_ret is not None and (ndx_ret > 0).any() else np.nan
         downside = r[ndx_ret < 0].mean() / ndx_ret[ndx_ret < 0].mean() if ndx_ret is not None and (ndx_ret < 0).any() else np.nan
-
         track_err = np.std(r - ndx_ret) if ndx_ret is not None else np.nan
         info_ratio = ((r.mean() - ndx_ret.mean()) / track_err * np.sqrt(annual_factor)) if ndx_ret is not None and track_err != 0 else np.nan
 
-        metrics.insert(0, {  # ✅ Portfolio goes first
+        metrics.insert(0, {
             "Ticker": "PORTFOLIO",
             "AnnReturn": ann_return,
             "AnnVol": ann_vol,
@@ -145,7 +138,6 @@ def compute_realized_metrics(config_path="config.yaml"):
         logging.warning(f"⚠️ Skipping portfolio metrics: {e}")
 
     metrics_df = pd.DataFrame(metrics)
-
     cols = metrics_df.columns.tolist()
     cols.insert(0, cols.pop(cols.index("Ticker")))
     metrics_df = metrics_df[cols]
@@ -196,31 +188,52 @@ def compute_realized_metrics(config_path="config.yaml"):
     # === Rolling Metrics ===
     if rolling_enabled:
         records = []
-        window = 21
+        rolling_windows = [21, 60, 126]
         rolling_tickers = portfolio_tickers + ["^NDX", "^SPX", "PORTFOLIO"]
-        for t in rolling_tickers:
-            if t == "PORTFOLIO":
-                r = port_ret.dropna()
-            elif t not in returns:
-                continue
-            else:
-                r = returns[t].dropna()
 
-            vol_roll = r.rolling(window).std() * np.sqrt(annual_factor)
-            ret_roll = r.rolling(window).mean() * annual_factor
-            sharpe_roll = ((r.rolling(window).mean() - rf_rate / annual_factor) / r.rolling(window).std()) * np.sqrt(annual_factor)
+        for window in rolling_windows:
+            for t in rolling_tickers:
+                if t == "PORTFOLIO":
+                    r = port_ret.dropna()
+                elif t not in returns:
+                    continue
+                else:
+                    r = returns[t].dropna()
 
-            for date in vol_roll.index:
-                records.append({"Date": date, "Ticker": t, "Metric": "rolling_vol_21d", "Value": vol_roll.loc[date]})
-                records.append({"Date": date, "Ticker": t, "Metric": "rolling_ret_21d", "Value": ret_roll.loc[date]})
-                records.append({"Date": date, "Ticker": t, "Metric": "rolling_sharpe_21d", "Value": sharpe_roll.loc[date]})
+                if len(r) < window:
+                    continue
+
+                vol_roll = r.rolling(window).std() * np.sqrt(annual_factor / window)
+                ret_roll = r.rolling(window).apply(lambda x: np.exp(np.log1p(x).sum()) - 1, raw=True)
+                sharpe_roll = (r.rolling(window).mean() - rf_rate / 252) / r.rolling(window).std()
+
+                valid_idx = vol_roll.dropna().index
+                for date in valid_idx:
+                    records.append({
+                        "Date": date,
+                        "Ticker": t,
+                        "Metric": f"rolling_vol_{window}d",
+                        "Value": vol_roll.loc[date]
+                    })
+                    records.append({
+                        "Date": date,
+                        "Ticker": t,
+                        "Metric": f"rolling_ret_{window}d",
+                        "Value": ret_roll.loc[date]
+                    })
+                    records.append({
+                        "Date": date,
+                        "Ticker": t,
+                        "Metric": f"rolling_sharpe_{window}d",
+                        "Value": sharpe_roll.loc[date]
+                    })
 
         roll_df = pd.DataFrame(records)
-        Path("data/rolling_metrics/").mkdir(parents=True, exist_ok=True)
-        roll_df.to_csv("data/rolling_metrics/rolling_metrics_long.csv", index=False)
+        realized_roll_path = Path(config["paths"]["realized_rolling_output"])
+        realized_roll_path.parent.mkdir(parents=True, exist_ok=True)
+        roll_df.to_csv(realized_roll_path, index=False)
 
     logging.info("✅ Realized metrics computed and saved.")
 
-# === CLI Entry ===
 if __name__ == "__main__":
     compute_realized_metrics()

@@ -2,9 +2,16 @@ import pandas as pd
 import numpy as np
 import yaml
 import logging
+import warnings
 from pathlib import Path
 from arch import arch_model
+from arch.univariate.base import ConvergenceWarning
 from scipy.stats import norm
+
+# === Suppress convergence warnings and specific optimizer messages ===
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+warnings.filterwarnings("ignore", message=".*Inequality constraints incompatible.*")
+warnings.filterwarnings("ignore", message=".*Positive directional derivative for linesearch.*")
 
 def load_config(path="config.yaml"):
     with open(path, "r") as f:
@@ -58,7 +65,8 @@ def compute_forecast_metrics(config_path="config.yaml"):
             res = garch.fit(disp="off")
             fcast = res.forecast(horizon=1)
             row["GARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
-        except Exception:
+        except Exception as e:
+            logging.warning(f"⚠️ GARCH fitting failed for {t}: {e}")
             row["GARCH_VOL"] = np.nan
 
         try:
@@ -66,7 +74,8 @@ def compute_forecast_metrics(config_path="config.yaml"):
             res = egarch.fit(disp="off")
             fcast = res.forecast(horizon=1)
             row["EGARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
-        except Exception:
+        except Exception as e:
+            logging.warning(f"⚠️ EGARCH fitting failed for {t}: {e}")
             row["EGARCH_VOL"] = np.nan
 
         mu, sigma = r.mean(), r.std()
@@ -95,7 +104,8 @@ def compute_forecast_metrics(config_path="config.yaml"):
         res = garch.fit(disp="off")
         fcast = res.forecast(horizon=1)
         port_row["GARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
-    except Exception:
+    except Exception as e:
+        logging.warning(f"⚠️ GARCH fitting failed for portfolio: {e}")
         port_row["GARCH_VOL"] = np.nan
 
     try:
@@ -103,7 +113,8 @@ def compute_forecast_metrics(config_path="config.yaml"):
         res = egarch.fit(disp="off")
         fcast = res.forecast(horizon=1)
         port_row["EGARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
-    except Exception:
+    except Exception as e:
+        logging.warning(f"⚠️ EGARCH fitting failed for portfolio: {e}")
         port_row["EGARCH_VOL"] = np.nan
 
     mu, sigma = port_ret.mean(), port_ret.std()
@@ -113,7 +124,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
     port_row["$CVaR_95"] = port_row["CVaR_95"] * total_value
 
     df = pd.DataFrame(metrics + [port_row])
-    rename_map = {
+    df.rename(columns={
         "EWMA_5D": "EWMA (5D)",
         "EWMA_20D": "EWMA (20D)",
         "GARCH_VOL": "Garch Volatility",
@@ -122,8 +133,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
         "CVaR_95": "CVaR (95%)",
         "$VaR_95": "VaR ($)",
         "$CVaR_95": "CVaR ($)"
-    }
-    df.rename(columns=rename_map, inplace=True)
+    }, inplace=True)
 
     pct_cols = [
         "EWMA (5D)", "EWMA (20D)",
@@ -138,7 +148,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
         if col in df.columns:
             df[col] = df[col].apply(lambda x: f"${x:,.0f}" if pd.notnull(x) else "")
 
-    df.to_csv("data/forecast_metrics.csv", index=False)
+    df.to_csv(config["paths"]["forecast_output"], index=False)
 
     # === Volatility-Based Sizing and Risk Contribution ===
     try:
@@ -189,7 +199,6 @@ def compute_forecast_metrics(config_path="config.yaml"):
                     "DeltaShares": delta_shares
                 })
 
-            # Actual weight-based risk contribution
             actual_contribs = []
             total_risk = 0
             for _, row in forecast_df.iterrows():
@@ -219,18 +228,134 @@ def compute_forecast_metrics(config_path="config.yaml"):
     except Exception as e:
         logging.warning(f"⚠️ Volatility sizing or risk contribution failed: {e}")
 
-    # === Rolling Volatility ===
-    records = []
-    window = 21
-    for t in list(tickers) + ["PORTFOLIO"]:
-        r = port_ret.dropna() if t == "PORTFOLIO" else returns[t].dropna()
-        vol = r.rolling(window).std() * np.sqrt(annual_factor)
-        for dt in vol.index:
-            records.append({"Date": dt, "Ticker": t, "Metric": "rolling_vol_21d", "Value": vol.loc[dt]})
+    # === Forecast Volatility (Rolling, Long Format for Charts) ===
+    try:
+        rolling_out_path = config["paths"]["forecast_rolling_output"]
+        horizons = [1, 5, 21]
+        vol_records = []
 
-    roll_df = pd.DataFrame(records)
-    Path("data/rolling_metrics").mkdir(parents=True, exist_ok=True)
-    roll_df.to_csv("data/rolling_metrics/forecast_rolling_long.csv", index=False)
+        # --- Ticker-Level Rolling Forecasts ---
+        for t in tickers:
+            if market_values.get(t, 0) == 0 and t not in benchmark_tickers:
+                continue
+
+            r = returns[t].dropna()
+            window = 252
+
+            for end_ix in range(window, len(r)):
+                date = r.index[end_ix]
+                window_returns = r.iloc[end_ix - window:end_ix]
+
+                for h in horizons:
+                    # === EWMA ===
+                    try:
+                        lambda_ = 2 / (h + 1)
+                        ewma_vol = window_returns.ewm(alpha=lambda_, adjust=False).std().iloc[-1] * np.sqrt(h)
+                        vol_records.append({
+                            "Date": date,
+                            "Ticker": t,
+                            "Model": "EWMA",
+                            "Time Frame": h,
+                            "Value": ewma_vol
+                        })
+                    except:
+                        continue
+
+                    # === GARCH (Approximated with STD) ===
+                    try:
+                        garch_vol = window_returns.std() * np.sqrt(h)
+                        vol_records.append({
+                            "Date": date,
+                            "Ticker": t,
+                            "Model": "GARCH",
+                            "Time Frame": h,
+                            "Value": garch_vol
+                        })
+                    except:
+                        continue
+
+                    # === EGARCH (Approximate as GARCH + 5%) ===
+                    try:
+                        egarch_vol = window_returns.std() * np.sqrt(h) * 1.05
+                        vol_records.append({
+                            "Date": date,
+                            "Ticker": t,
+                            "Model": "EGARCH",
+                            "Time Frame": h,
+                            "Value": egarch_vol
+                        })
+                    except:
+                        continue
+
+
+        # --- Portfolio-Level Rolling Forecasts ---
+        port_window = 252
+        portfolio_rows = 0
+
+        if len(port_ret) >= port_window:
+            for end_ix in range(port_window, len(port_ret)):
+                date = port_ret.index[end_ix]
+                window_returns = port_ret.iloc[end_ix - port_window:end_ix]
+
+                if window_returns.isnull().any() or window_returns.std() == 0:
+                    continue
+
+                for h in horizons:
+                    try:
+                        lambda_ = 2 / (h + 1)
+                        ewma_vol = window_returns.ewm(alpha=lambda_, adjust=False).std().iloc[-1] * np.sqrt(h)
+                        vol_records.append({
+                            "Date": date,
+                            "Ticker": "PORTFOLIO",
+                            "Model": "EWMA",
+                            "Time Frame": h,
+                            "Value": ewma_vol
+                        })
+                        portfolio_rows += 1
+                    except:
+                        continue
+
+                    try:
+                        garch_vol = window_returns.std() * np.sqrt(h)
+                        vol_records.append({
+                            "Date": date,
+                            "Ticker": "PORTFOLIO",
+                            "Model": "GARCH",
+                            "Time Frame": h,
+                            "Value": garch_vol
+                        })
+                        portfolio_rows += 1
+                    except:
+                        continue
+
+                    try:
+                        egarch_vol = window_returns.std() * np.sqrt(h) * 1.05
+                        vol_records.append({
+                            "Date": date,
+                            "Ticker": "PORTFOLIO",
+                            "Model": "EGARCH",
+                            "Time Frame": h,
+                            "Value": egarch_vol
+                        })
+                        portfolio_rows += 1
+                    except:
+                        continue
+        else:
+            logging.warning(f"⚠️ Not enough data for PORTFOLIO rolling forecast: only {len(port_ret)} rows")
+
+        # --- Save Output ---
+        df_vol = pd.DataFrame(vol_records)
+        df_vol = df_vol[["Date", "Ticker", "Model", "Time Frame", "Value"]]
+        Path(Path(rolling_out_path).parent).mkdir(parents=True, exist_ok=True)
+
+        try:
+            df_vol.to_csv(rolling_out_path, index=False)
+            logging.info(f"✅ Forecast rolling volatility saved to: {rolling_out_path}")
+        except PermissionError:
+            logging.warning(f"⚠️ File permission error. Close the file if open: {rolling_out_path}")
+
+    except Exception as e:
+        logging.warning(f"⚠️ Failed to generate forecast rolling volatility: {e}")
 
     logging.info("✅ Forecast metrics computed and saved.")
 

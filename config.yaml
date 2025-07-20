@@ -9,8 +9,16 @@ paths:
   portfolio_weights: data/portfolio_weights.csv
   raw_prices_output: data/yahoo_prices.csv
   recon_prices_output: data/reconstructed_prices.csv
+  recon_sources_output: "data/recon_sources.csv"
   realized_output: data/realized_metrics.csv
   forecast_output: data/forecast_metrics.csv
+  realized_rolling_output: data/rolling_metrics/realized_rolling_long.csv
+  forecast_rolling_output: data/rolling_metrics/forecast_rolling_long.csv
+  correlation_matrix: data/correlation_matrix.csv
+  vol_contribution: data/vol_contribution.csv
+  forecast_risk_contributions: data/forecast_risk_contributions.csv
+  vol_sizing_output: data/vol_sizing_weights_long.csv
+  runtime_info: data/runtime_info.json
 loader:
   excel_path: ../Portfolio.xlsm
   sheet_name: Dashboard
@@ -30,21 +38,20 @@ theme_proxies:
   Fintech & Crypto: ARKF
   Global & EM Tech: EMQQ
   Biotech / Genomics: ARKG
-  Value / Core Holdings: SPY
+  Value / Core Holdings: ^SPX
   Energy Infrastructure: ICLN
-  Macro / Index Exposure: null
   Crypto Exposure: BTC-USD
   Cash Equivalent: BIL
-  
+  Large Cap Exposure: ^SPX
+  Tech Exposure: ^NDX
+  Volatility Exposure: ^VIX
 ticker_themes:
-  ^VIX: Macro / Index Exposure
-  BTC-USD: Macro / Index Exposure
-  ETH-USD: Macro / Index Exposure
-  QQQ: Macro / Index Exposure
-  QQQM: Macro / Index Exposure
-  SPY: Macro / Index Exposure
-  TQQQ: Macro / Index Exposure
-  SPX: Macro / Index Exposure
+  BTC-USD: Crypto Exposure
+  ETH-USD: Crypto Exposure
+  QQQ: Tech Exposure
+  QQQM: Tech Exposure
+  SPY: Large Cap Exposure
+  TQQQ: Tech Exposure
   NVDA: AI Compute & Hardware
   AMD: AI Compute & Hardware
   SMCI: AI Compute & Hardware
@@ -86,5 +93,4 @@ ticker_themes:
   BRK-B: Value / Core Holdings
   IBIT: Crypto Exposure
   SGOV: Cash Equivalent
-  
 fallback_proxy: ^NDX
