@@ -40,6 +40,26 @@ theme_proxies = config.get("theme_proxies", {})
 ticker_themes = config.get("ticker_themes", {})
 data_dir = project_root / "data"
 
+# === Load Portfolio Excel Function ===
+def load_portfolio(uploaded_file=None):
+    if uploaded_file:
+        # Load from the uploaded file
+        try:
+            portfolio = pd.read_excel(uploaded_file, sheet_name=None)  # Loads all sheets
+            return portfolio
+        except Exception as e:
+            st.error(f"❌ Failed to load portfolio from uploaded file:\n{e}")
+            return None
+    else:
+        # Default path from config.yaml for Portfolio file
+        portfolio_path = project_root / config["loader"]["excel_path"]
+        try:
+            portfolio = pd.read_excel(portfolio_path, sheet_name=None)  # Loads all sheets
+            return portfolio
+        except Exception as e:
+            st.error(f"❌ Failed to load portfolio from {portfolio_path}:\n{e}")
+            return None
+
 # === Load CSVs ===
 @st.cache_data
 def load_csv(path):
@@ -94,6 +114,20 @@ with st.sidebar:
         ["Full Pipeline", "Risk Analysis", "Factor Exposure"],
         index=0  # Default is "Full Pipeline"
     )
+
+    # Portfolio file upload
+    uploaded_file = st.file_uploader("Upload Portfolio Excel file (default: Portfolio.xlsm)", type=["xlsm", "xlsx"])
+    if uploaded_file:
+        portfolio = load_portfolio(uploaded_file)
+    else:
+        # Load from the path defined in config.yaml
+        portfolio = load_portfolio()
+
+    # Handle the portfolio if loaded
+    if portfolio:
+        st.success("Portfolio loaded successfully!")
+    else:
+        st.warning("No portfolio data available.")
 
     # Execute the selected components when the user presses the button
     if st.button("🐶 Run Daisy Risk Engine"):
