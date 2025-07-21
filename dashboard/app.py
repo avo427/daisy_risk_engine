@@ -8,7 +8,6 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import numpy as np
 import sys  # Needed to modify sys.path for parent-level imports
-import subprocess
 from sklearn.metrics import mean_absolute_error, r2_score
 
 # === Add parent directory to sys.path so we can import main.py ===
