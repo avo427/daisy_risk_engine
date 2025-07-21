@@ -5,7 +5,6 @@ import yaml
 import time
 import json
 from datetime import datetime
-from utils.config import load_config
 
 # === Setup Logging ===
 logging.basicConfig(
@@ -55,7 +54,6 @@ def initialize_pipeline():
 
 # === Function 1: Full Pipeline ===
 def run_full_pipeline():
-    config = load_config()
     logging.info("🚀 Running Full Pipeline")
     start = time.time()
     status = "success"
