@@ -7,19 +7,27 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import numpy as np
-import sys
+import sys  # Needed to modify sys.path for parent-level imports
 from sklearn.metrics import mean_absolute_error, r2_score
 
+# === Add parent directory to sys.path so we can import main.py ===
+project_root = Path(__file__).resolve().parents[1]
+sys.path.append(str(project_root))
+
+# Import functions for pipeline steps
+try:
+    from main import run_full_pipeline, run_risk_analysis, run_factor_exposure
+except ImportError as e:
+    st.error(f"❌ Failed to import functions from main.py:\n{e}")
+    run_full_pipeline = run_risk_analysis = run_factor_exposure = None
 
 # === Load Config ===
 def load_config():
-    project_root = Path(__file__).resolve().parents[1]
     config_path = project_root / "config.yaml"
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
 def save_config(updated_config):
-    project_root = Path(__file__).resolve().parents[1]
     config_path = project_root / "config.yaml"
     with open(config_path, "w") as f:
         yaml.dump(updated_config, f, sort_keys=False)
@@ -29,7 +37,6 @@ user_settings = config.get("user_settings", {})
 paths = config.get("paths", {})
 theme_proxies = config.get("theme_proxies", {})
 ticker_themes = config.get("ticker_themes", {})
-project_root = Path(__file__).resolve().parents[1]
 data_dir = project_root / "data"
 
 # === Load CSVs ===
@@ -76,23 +83,38 @@ with st.sidebar:
         st.session_state.update(load_all_data())
         st.rerun()
 
-    if st.button("Run Daisy Risk Engine"):
-        with st.spinner("Running full pipeline..."):
-            result = subprocess.run(
-                [sys.executable, str(project_root / "main.py")],
-                capture_output=True,
-                text=True,
-                cwd=project_root
-            )
-            if result.returncode == 0:
-                st.success("Pipeline complete.")
+    st.markdown("---")  # Horizontal separator before pipeline execution
+
+    st.subheader("Pipeline Configuration")
+
+    # Radio buttons instead of checkboxes (only one can be selected at a time)
+    pipeline_option = st.radio(
+        "Select the pipeline to run",
+        ["Full Pipeline", "Risk Analysis", "Factor Exposure"],
+        index=0  # Default is "Full Pipeline"
+    )
+
+    # Execute the selected components when the user presses the button
+    if st.button("🐶 Run Daisy Risk Engine"):
+        with st.spinner(f"Running {pipeline_option}... Please wait."):
+            try:
+                # Dynamically import and run the corresponding pipeline function
+                if pipeline_option == "Full Pipeline":
+                    run_full_pipeline()  # Execute the full pipeline function
+                elif pipeline_option == "Risk Analysis":
+                    run_risk_analysis()  # Execute the risk analysis function
+                elif pipeline_option == "Factor Exposure":
+                    run_factor_exposure()  # Execute the factor exposure function
+
+                st.success("✅ Run completed successfully.")
                 st.cache_data.clear()
                 st.session_state.update(load_all_data())
                 st.rerun()
-            else:
-                st.error("Pipeline failed.")
-                st.text(result.stderr)
+            except Exception as e:
+                st.error("❌ Run failed.")
+                st.exception(e)
 
+    # Button to reload data without running the pipeline
     if st.button("Reload Data Only"):
         st.cache_data.clear()
         st.session_state.update(load_all_data())
@@ -117,7 +139,12 @@ if not df_fore_roll.empty:
 
 
 # === Tabs ===
-tabs = st.tabs(["Realized Risk", "Forecast Risk", "Volatility-Based Sizing", "Themes & Proxies","Reconstructed Prices"])
+tabs = st.tabs(["Realized Risk", 
+                "Forecast Risk", 
+                "Volatility-Based Sizing",
+                "Factor Exposure", 
+                "Themes & Proxies",
+                "Reconstructed Prices"])
 
 # === Tab 1: Realized Risk ===
 with tabs[0]:
@@ -618,10 +645,136 @@ with tabs[2]:
     else:
         st.info("No volatility-based sizing output found. Run the engine to generate it.")
 
-
-
-# === Tab 4: Themes & Proxies ===
+# === Tab 4: Factor Exposure ===
 with tabs[3]:
+    st.subheader("Latest Factor Exposures")
+
+    # Load weights and valid tickers
+    weights_path = project_root / paths["portfolio_weights"]
+    exposures_path = project_root / paths["factor_exposures"]
+    df_weights = pd.read_csv(weights_path)
+    valid_tickers = set(df_weights[df_weights["Weight"] > 0]["Ticker"].str.upper())
+    valid_tickers.update(["^NDX", "^SPX", "PORTFOLIO"])
+
+    # Load and filter factor exposures
+    if exposures_path.exists():
+        df_expo = pd.read_csv(exposures_path)
+        df_expo["Date"] = pd.to_datetime(df_expo["Date"])
+        latest_date = df_expo["Date"].max()
+        df_latest = df_expo[df_expo["Date"] == latest_date].copy()
+        df_latest["Ticker"] = df_latest["Ticker"].str.upper()
+        df_latest = df_latest[df_latest["Ticker"].isin(valid_tickers)]
+
+        df_matrix = df_latest.pivot(index="Ticker", columns="Factor", values="Beta").round(2)
+
+        def exposure_style(row):
+            return ["color: orange" if row.name == "PORTFOLIO" else "" for _ in row]
+
+        table_height = 38 * len(df_matrix)
+        st.caption(f"Exposures as of {latest_date.date()}")
+        st.dataframe(
+            df_matrix.style
+                .apply(exposure_style, axis=1)
+                .format("{:.2f}"),
+            use_container_width=True,
+            height=table_height
+        )
+    else:
+        df_matrix = pd.DataFrame()
+        st.info("No factor exposure file found. Please run the risk engine.")
+
+    # === Heatmap of Latest Exposures ===
+    st.subheader("Heatmap of Latest Exposures")
+    if not df_matrix.empty:
+        fig = px.imshow(
+            df_matrix,
+            labels=dict(color="Beta"),
+            x=df_matrix.columns,
+            y=df_matrix.index,
+            color_continuous_scale=[
+                [0.0, '#2166ac'],
+                [0.5, '#f7f7f7'],
+                [1.0, '#b2182b']
+            ],
+            zmin=-1,
+            zmax=1,
+            aspect="auto"
+        )
+        fig.update_layout(height=700)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # === Rolling Factor Exposures ===
+    st.subheader("Rolling Factor Exposures")
+    rolling_path = project_root / paths["factor_rolling_long"]
+    if rolling_path.exists():
+        df_roll_factors = pd.read_csv(rolling_path)
+        df_roll_factors["Date"] = pd.to_datetime(df_roll_factors["Date"])
+        df_roll_factors["Ticker"] = df_roll_factors["Ticker"].str.upper()
+        df_roll_factors = df_roll_factors[df_roll_factors["Ticker"].isin(valid_tickers)]
+
+        available_factors = sorted(df_roll_factors["Factor"].unique())
+        available_tickers = sorted(df_roll_factors["Ticker"].unique())
+
+        col1, col2 = st.columns(2)
+        with col1:
+            default_factor = ["MARKET"] if "MARKET" in available_factors else available_factors[:1]
+            selected_factors = st.multiselect("Select Factors", options=available_factors, default=default_factor)
+        with col2:
+            default_ticker = ["PORTFOLIO"] if "PORTFOLIO" in available_tickers else available_tickers[:1]
+            selected_tickers = st.multiselect("Select Tickers", options=available_tickers, default=default_ticker)
+
+        df_filtered = df_roll_factors[
+            df_roll_factors["Factor"].isin(selected_factors) &
+            df_roll_factors["Ticker"].isin(selected_tickers)
+        ]
+        df_filtered["Beta"] = df_filtered["Beta"].round(2)
+
+        if df_filtered.empty:
+            st.warning("No data for selected tickers and factors.")
+        else:
+            fig = px.line(
+                df_filtered,
+                x="Date", y="Beta", color="Factor", line_dash="Ticker",
+                title="Rolling Factor Exposures"
+            )
+            fig.update_layout(height=700)
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No rolling factor exposure file found.")
+
+    # === Rolling R² ===
+    st.subheader("Rolling R²")
+    r2_path = project_root / paths["r2_rolling_long"]
+    if r2_path.exists():
+        df_r2 = pd.read_csv(r2_path)
+        df_r2["Date"] = pd.to_datetime(df_r2["Date"])
+        df_r2["Ticker"] = df_r2["Ticker"].str.upper()
+        df_r2 = df_r2[df_r2["Ticker"].isin(valid_tickers)]
+
+        available_r2_tickers = sorted(df_r2["Ticker"].unique())
+        default_r2 = ["PORTFOLIO"] if "PORTFOLIO" in available_r2_tickers else available_r2_tickers[:1]
+        selected_r2_tickers = st.multiselect(
+            "Select Tickers for R²:", options=available_r2_tickers, default=default_r2
+        )
+
+        df_r2_filtered = df_r2[df_r2["Ticker"].isin(selected_r2_tickers)]
+
+        if df_r2_filtered.empty:
+            st.warning("No R² data for selected tickers.")
+        else:
+            fig = px.line(
+                df_r2_filtered,
+                x="Date", y="R2", color="Ticker",
+                title="Rolling R²"
+            )
+            fig.update_layout(height=700, yaxis_range=[0, 1])
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No R² rolling file found.")
+
+
+# === Tab 5: Themes & Proxies ===
+with tabs[4]:
     st.subheader("Theme Proxies")
     theme_proxy_df = pd.DataFrame(list(theme_proxies.items()), columns=["Theme", "ETF Proxy"])
     theme_proxy_height = 35 * (len(theme_proxy_df) + 2)
@@ -649,8 +802,8 @@ with tabs[3]:
         st.success("Theme and ticker mappings saved.")
         st.rerun()
 
-# === Tab 5: Reconstructed Prices ===
-with tabs[4]:
+# === Tab 6: Reconstructed Prices ===
+with tabs[5]:
     st.subheader("Reconstructed Prices Viewer")
 
     # Load required files

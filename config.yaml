@@ -5,11 +5,15 @@ user_settings:
   random_state: 44
   risk_free_rate: 0.05
   starting_portfolio_value: 100000
+  factor_regression_window: 60        # Rolling window in days
+  factor_targets:                     # Entities to run factor regression on
+    - PORTFOLIO                       # Always include portfolio
+    - TICKERS                         # Optional: include individual tickers
 paths:
   portfolio_weights: data/portfolio_weights.csv
   raw_prices_output: data/yahoo_prices.csv
   recon_prices_output: data/reconstructed_prices.csv
-  recon_sources_output: "data/recon_sources.csv"
+  recon_sources_output: data/recon_sources.csv
   realized_output: data/realized_metrics.csv
   forecast_output: data/forecast_metrics.csv
   realized_rolling_output: data/rolling_metrics/realized_rolling_long.csv
@@ -19,6 +23,10 @@ paths:
   forecast_risk_contributions: data/forecast_risk_contributions.csv
   vol_sizing_output: data/vol_sizing_weights_long.csv
   runtime_info: data/runtime_info.json
+  factor_returns: data/factor_returns.csv
+  factor_exposures: data/factor_exposures.csv
+  factor_rolling_long: data/rolling_metrics/factor_rolling_long.csv
+  r2_rolling_long: data/rolling_metrics/r2_rolling_long.csv
 loader:
   excel_path: ../Portfolio.xlsm
   sheet_name: Dashboard
@@ -41,7 +49,7 @@ theme_proxies:
   Value / Core Holdings: ^SPX
   Energy Infrastructure: ICLN
   Crypto Exposure: BTC-USD
-  Cash Equivalent: BIL
+  Cash Equivalent: SHV
   Large Cap Exposure: ^SPX
   Tech Exposure: ^NDX
   Volatility Exposure: ^VIX
@@ -94,3 +102,57 @@ ticker_themes:
   IBIT: Crypto Exposure
   SGOV: Cash Equivalent
 fallback_proxy: ^NDX
+
+factors:
+  standard:
+    MARKET:
+      proxy: "^NDX"
+
+    VOLATILITY:
+      proxy: "^VIX"
+      transform: "pct_change"  # Use "zscore" for standardized shock indicator
+
+    RATES:
+      proxy: "^TNX"
+      transform: "pct_change"  # Change in 10Y rate proxy
+
+    MOMENTUM:
+      proxy: "MTUM"
+      transform: "log_return"
+
+    SIZE:
+      proxy: "IWM"
+      transform: "log_return"
+
+    VALUE:
+      proxy: "VLUE"
+      transform: "log_return"
+
+    QUALITY:
+      proxy: "QUAL"
+      transform: "log_return"
+
+    MIN_VOL:
+      proxy: "SPLV"
+      transform: "log_return"
+
+  thematic:
+    AI:
+      tickers:
+        - NVDA
+        - AVGO
+        - TSM
+        - PLTR
+      weights: "market_cap"        # Use actual market caps if available
+
+    MEME:
+      tickers:
+        - GME
+        - CVNA
+        - TSLA
+        - AMC
+        - PLTR
+        - ASTS
+      weights: "equal"
+      normalize: true              # Apply z-scoring across tickers before combining
+
