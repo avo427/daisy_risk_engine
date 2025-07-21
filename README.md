@@ -89,7 +89,7 @@ Follow these steps to install and run the **Daisy Risk Engine**:
 
     ### Portfolio Excel File Configuration:
     - **Path**: Specify the path to the Excel file in `config.yaml`.
-    - **Named Ranges**: Define the named ranges for **tickers**, **weights**, and **market values**. These ranges should each be a **1xN or Nx1 vector** (row or column vector with matching dimensions).
+    - **Named Ranges**: Define the named ranges for **tickers**, **weights**, and **market values**. These ranges should be a row or column vector with matching dimensions.
 
     Example configuration:
     ```yaml
