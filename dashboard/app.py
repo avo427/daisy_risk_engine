@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import subprocess
@@ -40,23 +41,16 @@ theme_proxies = config.get("theme_proxies", {})
 ticker_themes = config.get("ticker_themes", {})
 data_dir = project_root / "data"
 
-# === Load CSVs ===
-@st.cache_data
-def load_csv(path):
-    path = Path(path)
-    if not path.exists():
-        return pd.DataFrame()
-    return pd.read_csv(path, index_col=None)
-
-def load_all_data():
-    return {
-        "realized": load_csv(project_root / paths["realized_output"]),
-        "roll": load_csv(project_root / paths["realized_rolling_output"]),
-        "corr": load_csv(project_root / paths["correlation_matrix"]),
-        "vol": load_csv(project_root / paths["vol_contribution"]),
-        "forecast": load_csv(project_root / paths["forecast_output"]),
-        "forecast_roll": load_csv(project_root / paths["forecast_rolling_output"]),
-    }
+# === Load Portfolio Excel Function ===
+def load_portfolio(file_path):
+    # Load the Excel file with specific sheet names if required
+    try:
+        portfolio = pd.read_excel(file_path, sheet_name=None)  # Loads all sheets
+        # Extract named ranges or sheets as needed, or just use the default sheet
+        return portfolio
+    except Exception as e:
+        st.error(f"❌ Failed to load portfolio from {file_path}:\n{e}")
+        return None
 
 # === UI Setup ===
 st.set_page_config(page_title="Daisy Risk Engine", layout="wide")
@@ -95,6 +89,21 @@ with st.sidebar:
         index=0  # Default is "Full Pipeline"
     )
 
+    # Portfolio file upload
+    uploaded_file = st.file_uploader("Upload Portfolio Excel file (default: Portfolio.xlsm)", type=["xlsm", "xlsx"])
+    if uploaded_file:
+        portfolio = load_portfolio(uploaded_file)
+    else:
+        # Default to loading the Portfolio from the parent directory
+        default_portfolio_path = project_root / "Portfolio.xlsm"
+        portfolio = load_portfolio(default_portfolio_path)
+
+    # Handle the portfolio if loaded
+    if portfolio:
+        st.success("Portfolio loaded successfully!")
+    else:
+        st.warning("No portfolio data available.")
+
     # Execute the selected components when the user presses the button
     if st.button("🐶 Run Daisy Risk Engine"):
         import subprocess
@@ -130,7 +139,6 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")  # Horizontal separator before runtime
-
 
 # === Initialize session data ===
 if "realized" not in st.session_state:

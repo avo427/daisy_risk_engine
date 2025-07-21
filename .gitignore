@@ -26,9 +26,6 @@ data/
 # Ignore the .git folder
 .git/
 
-# Ignore the compiled risk engine (if not required for version control)
-daisy_risk_engine.vbs
-
 # Ignore other IDE-specific files (e.g., VSCode, JetBrains)
 .vscode/
 .idea/
