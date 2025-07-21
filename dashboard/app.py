@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import numpy as np
 import sys  # Needed to modify sys.path for parent-level imports
+import subprocess
 from sklearn.metrics import mean_absolute_error, r2_score
 
 # === Add parent directory to sys.path so we can import main.py ===
@@ -96,23 +97,31 @@ with st.sidebar:
 
     # Execute the selected components when the user presses the button
     if st.button("🐶 Run Daisy Risk Engine"):
-        with st.spinner(f"Running {pipeline_option}... Please wait."):
-            try:
-                # Dynamically import and run the corresponding pipeline function
-                if pipeline_option == "Full Pipeline":
-                    run_full_pipeline()  # Execute the full pipeline function
-                elif pipeline_option == "Risk Analysis":
-                    run_risk_analysis()  # Execute the risk analysis function
-                elif pipeline_option == "Factor Exposure":
-                    run_factor_exposure()  # Execute the factor exposure function
+        import subprocess
+        import sys
 
-                st.success("✅ Run completed successfully.")
-                st.cache_data.clear()
-                st.session_state.update(load_all_data())
-                st.rerun()
-            except Exception as e:
-                st.error("❌ Run failed.")
-                st.exception(e)
+        mode_map = {
+            "Full Pipeline": "full",
+            "Risk Analysis": "risk",
+            "Factor Exposure": "factor"
+        }
+        selected_mode = mode_map[pipeline_option]  # Map UI label to CLI mode
+
+        with st.spinner(f"Running {pipeline_option}... Please wait."):
+            result = subprocess.run(
+                [sys.executable, str(project_root / "main.py"), "--mode", selected_mode],
+                capture_output=True,
+                text=True
+            )
+
+        if result.returncode == 0:
+            st.success("✅ Run completed successfully.")  # Show success in UI
+            st.cache_data.clear()
+            st.session_state.update(load_all_data())  # Reload data
+            st.rerun()  # Refresh app with new state
+        else:
+            st.error("❌ Pipeline run failed. See logs below.")  # Show error
+            st.code(result.stdout + "\n" + result.stderr, language="bash")  # Print logs
 
     # Button to reload data without running the pipeline
     if st.button("Reload Data Only"):
