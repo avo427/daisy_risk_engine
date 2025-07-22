@@ -2,156 +2,172 @@ import pandas as pd
 import numpy as np
 import yaml
 from pathlib import Path
-from statsmodels.regression.rolling import RollingOLS
-import statsmodels.api as sm
 import sys
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
 
+# === Load config ===
 def load_config(config_path=None):
     if config_path is None:
         config_path = Path(__file__).resolve().parent.parent / "config.yaml"
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             return yaml.safe_load(f)
-    except Exception as e:
-        print(f"❌ Failed to load config file at {config_path}: {e}")
+    except FileNotFoundError:
+        print(f"❌ Config file not found at {config_path}")
         sys.exit(1)
 
-def load_portfolio_returns(prices, weights):
-    missing_tickers = set(weights["Ticker"]) - set(prices.columns)
-    if missing_tickers:
-        raise ValueError(f"Tickers missing in price data: {missing_tickers}")
-
-    weights = weights.set_index("Ticker")["Weight"]
-    prices = prices[weights.index]
-    returns = np.log(prices).diff()
-
-    if returns.isnull().all().all():
-        raise ValueError("All returns are NaN after log-diff calculation.")
-
-    weighted_returns = returns @ weights
-    return weighted_returns.rename("PORTFOLIO")
-
+# === Rolling OLS regression with aligned data ===
 def run_rolling_ols(y, X, window):
-    if not isinstance(window, int) or window <= 0:
-        raise ValueError(f"Window must be a positive integer, got {window}")
+    betas = pd.DataFrame(index=y.index, columns=X.columns)
+    r2_scores = pd.Series(index=y.index)
 
-    y = y.dropna()
-    X = X.reindex(y.index).copy()
-    X = sm.add_constant(X)
+    for i in range(window, len(y)):
+        y_window = y.iloc[i - window:i]
+        X_window = X.iloc[i - window:i]
 
-    valid = y.notna() & X.notna().all(axis=1)
-    y = y[valid]
-    X = X[valid]
+        try:
+            model = LinearRegression().fit(X_window, y_window)
+            betas.iloc[i] = model.coef_
+            r2_scores.iloc[i] = r2_score(y_window, model.predict(X_window))
+        except Exception as e:
+            print(f"❌ Fit failed at index {i}: {e}")
+            continue
 
-    if len(y) < window:
-        raise ValueError(f"Not enough data points ({len(y)}) for rolling window size {window}")
+    return betas, r2_scores
 
-    model = RollingOLS(endog=y, exog=X, window=window)
-    results = model.fit()
-    return results.params.drop(columns="const", errors="ignore"), results.rsquared
+# === Portfolio returns ===
+def load_portfolio_returns(prices, weights):
+    prices = prices[weights["Ticker"].values].dropna(how="all")
+    returns = np.log(prices).diff()
+    aligned_weights = weights.set_index("Ticker")["Weight"]
+    weighted_returns = returns.mul(aligned_weights, axis=1)
+    return weighted_returns.sum(axis=1)
 
+# === Main entry point ===
 def main():
     config = load_config()
     paths = config["paths"]
     settings = config["user_settings"]
-    base_path = Path(__file__).resolve().parent.parent
-
-    # Load inputs
-    try:
-        prices = pd.read_csv(base_path / paths["recon_prices_output"], parse_dates=["Date"], index_col="Date")
-        weights = pd.read_csv(base_path / paths["portfolio_weights"])
-        factors = pd.read_csv(base_path / paths["factor_returns"], parse_dates=["Date"], index_col="Date")
-    except Exception as e:
-        print(f"❌ Error loading input data: {e}")
-        sys.exit(1)
-
-    if not isinstance(prices.index, pd.DatetimeIndex):
-        raise ValueError("Prices file must have 'Date' as a datetime index.")
-    if not isinstance(factors.index, pd.DatetimeIndex):
-        raise ValueError("Factor file must have 'Date' as a datetime index.")
-    if factors.isnull().any().any():
-        print("⚠️ Warning: NaNs detected in factor data — these rows will be dropped in regressions.")
-
     window = settings.get("factor_regression_window", 60)
-    if not isinstance(window, int) or window <= 0:
-        print(f"❌ Invalid factor_regression_window in config: {window}")
-        sys.exit(1)
 
-    targets = settings.get("factor_targets", ["PORTFOLIO"])
+    # Load data
+    prices = pd.read_csv(paths["recon_prices_output"], index_col=0, parse_dates=True)
+    weights = pd.read_csv(paths["portfolio_weights"])
+    factors = pd.read_csv(paths["factor_returns"], index_col=0, parse_dates=True).dropna(how="all")
+
+    if factors.empty:
+        print("❌ factor_returns.csv is empty — aborting.")
+        return
+
+    # Identify active tickers (Weight > 0)
+    active_tickers = weights[weights["Weight"] > 0]["Ticker"].str.upper().tolist()
+
+    # Build return matrix
     all_returns = {}
+    if "PORTFOLIO" in settings.get("factor_targets", []):
+        port_ret = load_portfolio_returns(prices, weights)
+        if not port_ret.dropna().empty:
+            all_returns["PORTFOLIO"] = port_ret
 
-    try:
-        all_returns["PORTFOLIO"] = load_portfolio_returns(prices, weights)
-        if "TICKERS" in targets:
-            ticker_rets = np.log(prices).diff()
-            for tk in ticker_rets.columns:
-                all_returns[tk] = ticker_rets[tk]
-    except Exception as e:
-        print(f"❌ Error preparing return targets: {e}")
-        sys.exit(1)
+    if "TICKERS" in settings.get("factor_targets", []):
+        ticker_returns = np.log(prices).diff()
+        for t in ticker_returns.columns:
+            if t.upper() in active_tickers:
+                all_returns[t] = ticker_returns[t]
 
-    all_results = []
-    r2_values = []
+    # Expand targets to only valid tickers
+    targets = settings.get("factor_targets", ["PORTFOLIO"])
+    if "TICKERS" in targets:
+        ticker_list = [t for t in prices.columns if t.upper() in active_tickers]
+        targets = [t for t in targets if t != "TICKERS"] + ticker_list
 
-    for name, y in all_returns.items():
-        try:
-            betas, r2 = run_rolling_ols(y, factors, window)
-        except Exception as e:
-            print(f"⚠️ Regression failed for {name}: {e}")
+    print(f"📊 Regressing on targets: {targets}")
+    print(f"📈 Available return series: {list(all_returns.keys())}")
+    print(f"📉 Factor matrix shape: {factors.shape}")
+    print(f"📅 Factor returns date range: {factors.index.min()} → {factors.index.max()}")
+
+    exposures_list = []
+    latest_expo = []
+    r2_list = []
+
+    for name in targets:
+        y = all_returns.get(name)
+        if y is None or y.dropna().empty:
+            print(f"⚠️ Skipping {name} — no valid return series.")
             continue
 
-        # Quality checks
-        if betas.drop(columns="Ticker", errors="ignore").var().sum() == 0:
-            print(f"⚠️ Warning: All-zero beta series for {name}")
-        if r2.mean() < 0.05:
-            print(f"⚠️ Low R² ({r2.mean():.3f}) for {name}")
+        # Align y and factors to common index
+        common_index = y.index.intersection(factors.index)
+        y_aligned = y.loc[common_index].dropna()
+        X_aligned = factors.loc[common_index].dropna(how="any")
 
-        betas["Ticker"] = name
-        all_results.append(betas)
+        # Align both again to final shared index
+        final_index = y_aligned.index.intersection(X_aligned.index)
+        y_final = y_aligned.loc[final_index]
+        X_final = X_aligned.loc[final_index]
 
-        r2 = r2.to_frame(name="R2")
-        r2.index.name = "Date"
-        r2["Ticker"] = name
-        r2_values.append(r2)
+        if len(y_final) < window:
+            print(f"⚠️ Skipping {name} — not enough data after alignment ({len(y_final)} rows)")
+            continue
 
-    if not all_results:
-        print("❌ No successful regression results to save.")
-        sys.exit(1)
+        print(f"🔄 Running regression for {name}: {len(y_final)} rows aligned from {final_index.min().date()} to {final_index.max().date()}")
 
-    # Save beta exposures (long format)
-    all_betas = pd.concat(all_results)
-    all_betas.index.name = "Date"
-    all_betas = all_betas.reset_index().melt(id_vars=["Date", "Ticker"], var_name="Factor", value_name="Beta")
-    all_betas.sort_values(by=["Ticker", "Factor", "Date"], inplace=True)
+        try:
+            betas, r2 = run_rolling_ols(y_final, X_final, window)
+            betas = betas.dropna(how="all")
+            r2 = r2.dropna()
 
-    rolling_path = base_path / paths["factor_rolling_long"]
-    rolling_path.parent.mkdir(parents=True, exist_ok=True)
-    all_betas.to_csv(rolling_path, index=False)
+            if not betas.empty:
+                betas["Date"] = betas.index
+                betas["Ticker"] = name
+                exposures_list.append(betas)
 
-    # Save latest exposures
-    exposures_path = base_path / paths["factor_exposures"]
-    exposures_path.parent.mkdir(parents=True, exist_ok=True)
-    latest_exposures = all_betas.groupby(["Ticker", "Factor"]).last().reset_index()
+                # === Save just the latest exposure for static output
+                latest_row = betas.iloc[-1].drop(["Date", "Ticker"])
+                for factor in latest_row.index:
+                    latest_expo.append({
+                        "Date": betas.index[-1],
+                        "Ticker": name,
+                        "Factor": factor,
+                        "Beta": latest_row[factor]
+                    })
 
-    if "Date" in latest_exposures.columns:
-        cols = latest_exposures.columns.tolist()
-        cols.insert(0, cols.pop(cols.index("Date")))
-        latest_exposures = latest_exposures[cols]
+            if not r2.empty:
+                r2_df = r2.reset_index()
+                r2_df.columns = ["Date", "R2"]
+                r2_df["Ticker"] = name
+                r2_list.append(r2_df)
+        except Exception as e:
+            print(f"❌ Regression failed for {name}: {e}")
 
-    latest_exposures.sort_values(by=["Ticker", "Factor", "Date"], inplace=True)
-    latest_exposures.to_csv(exposures_path, index=False)
+    if not exposures_list and not r2_list:
+        raise RuntimeError("❌ No factor regressions succeeded. Check return matrix and targets.")
 
-    # Save rolling R²
-    r2_long = pd.concat(r2_values).reset_index()
-    r2_long["Factor"] = "R2"
-    r2_long = r2_long[["Date", "Ticker", "Factor", "R2"]]
-    r2_long.sort_values(by=["Ticker", "Date"], inplace=True)
+    # === Save static factor exposures (latest only) ===
+    if latest_expo:
+        df_static = pd.DataFrame(latest_expo)
+        Path(paths["factor_exposures"]).parent.mkdir(parents=True, exist_ok=True)
+        df_static.to_csv(paths["factor_exposures"], index=False)
+        print(f"✅ Saved latest factor exposures to {paths['factor_exposures']}")
+    else:
+        print("⚠️ No static factor exposures saved.")
 
-    r2_path = base_path / paths["r2_rolling_long"]
-    r2_path.parent.mkdir(parents=True, exist_ok=True)
-    r2_long.to_csv(r2_path, index=False)
+    # === Save rolling factor betas in long format ===
+    if exposures_list:
+        df_rolling = pd.concat(exposures_list).melt(id_vars=["Date", "Ticker"], var_name="Factor", value_name="Beta").dropna()
+        df_rolling.to_csv(paths["factor_rolling_long"], index=False)
+        print(f"✅ Saved rolling exposures to {paths['factor_rolling_long']}")
+    else:
+        print("⚠️ No rolling exposures generated.")
 
-    print("✅ Factor regression outputs saved.")
+    # === Save rolling R² ===
+    if r2_list:
+        df_r2 = pd.concat(r2_list).dropna()
+        df_r2.to_csv(paths["r2_rolling_long"], index=False)
+        print(f"✅ Saved rolling R² to {paths['r2_rolling_long']}")
+    else:
+        print("⚠️ No R² data generated.")
 
 if __name__ == "__main__":
     main()

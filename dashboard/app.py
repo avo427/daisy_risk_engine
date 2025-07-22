@@ -8,7 +8,7 @@ project_root = Path(__file__).resolve().parents[1]
 sys.path.append(str(project_root))
 
 # Import modularized components
-from config import load_config, save_config
+from utils.config import load_config, save_config
 from data_loader import load_all_data
 from ui.sidebar import render_sidebar
 from ui.tabs.realized import realized_tab
