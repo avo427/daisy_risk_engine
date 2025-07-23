@@ -30,7 +30,7 @@ def render_sidebar(config, save_config, load_all_data, project_root, paths, user
         index=0
     )
 
-    if st.button("🐶 Run Daisy Risk Engine"):
+    if st.button("Run Daisy Risk Engine"):
         import subprocess
         import sys
         mode_map = {
@@ -46,12 +46,12 @@ def render_sidebar(config, save_config, load_all_data, project_root, paths, user
                 text=True
             )
         if result.returncode == 0:
-            st.success("✅ Run completed successfully.")
+            st.success("SUCCESS: Run completed successfully.")
             st.cache_data.clear()
             st.session_state.update(load_all_data())
             st.rerun()
         else:
-            st.error("❌ Pipeline run failed. See logs below.")
+            st.error("ERROR: Pipeline run failed. See logs below.")
             st.code(result.stdout + "\n" + result.stderr, language="bash")
 
     if st.button("Reload Data Only"):

@@ -118,7 +118,7 @@ def prices_tab(project_root, paths):
                     "Mismatches": mismatches,
                     "MAE": f"{mae:.2f}" if pd.notnull(mae) else "",
                     "R2 Score": f"{r2:.2f}" if pd.notnull(r2) else "",
-                    "Status": "✅" if mismatches == 0 else "❌"
+                    "Status": "SUCCESS" if mismatches == 0 else "ERROR"
                 })
             if validation_data:
                 df_valid = pd.DataFrame(validation_data).sort_values("Ticker").set_index("Ticker")

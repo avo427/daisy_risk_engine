@@ -27,7 +27,7 @@ def download_price_data(tickers, start_date, end_date, use_total_returns=True):
                 collected[tk] = raw[(tk, price_col)]
             except KeyError:
                 skipped.append(tk)
-                print(f"⚠️ Skipping {tk}: missing '{price_col}' column.")
+                print(f"WARNING: Skipping {tk}: missing '{price_col}' column.")
     else:
         try:
             collected[tickers[0]] = raw[price_col]
@@ -35,7 +35,7 @@ def download_price_data(tickers, start_date, end_date, use_total_returns=True):
             raise KeyError(f"'{price_col}' column not found in single ticker download.")
 
     if skipped:
-        print(f"⚠️ Skipped {len(skipped)} tickers: {', '.join(skipped)}")
+        print(f"WARNING: Skipped {len(skipped)} tickers: {', '.join(skipped)}")
 
     df = pd.DataFrame(collected)
     return df.ffill().bfill()
@@ -47,7 +47,7 @@ def build_standard_factors(factor_config, price_data):
         transform = meta.get('transform', 'log_return')
 
         if proxy not in price_data.columns:
-            print(f"⚠️ Skipping {name}: proxy '{proxy}' not found in downloaded data.")
+            print(f"WARNING: Skipping {name}: proxy '{proxy}' not found in downloaded data.")
             continue
 
         prices = price_data[proxy]
@@ -70,7 +70,7 @@ def build_thematic_factors(theme_config, price_data, market_caps=None):
 
         available = [tk for tk in tickers if tk in price_data.columns]
         if len(available) < 2:
-            print(f"⚠️ Skipping {theme}: insufficient valid tickers found.")
+            print(f"WARNING: Skipping {theme}: insufficient valid tickers found.")
             continue
 
         weights = np.ones(len(available)) / len(available)
@@ -113,5 +113,5 @@ def main():
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     all_returns.to_csv(output_path)
-    print(f"✅ Factor returns saved to {output_path}")
+    print(f"SUCCESS: Factor returns saved to {output_path}")
 

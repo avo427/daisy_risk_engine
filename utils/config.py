@@ -19,19 +19,19 @@ def load_config(path: str = "config.yaml") -> dict:
         config_path = config_path / "config.yaml"
 
     if not config_path.exists():
-        raise FileNotFoundError(f"❌ config.yaml not found at: {config_path}")
+        raise FileNotFoundError(f"ERROR: config.yaml not found at: {config_path}")
 
     try:
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        raise ValueError(f"❌ Failed to parse YAML file at {config_path} — {e}")
+        raise ValueError(f"ERROR: Failed to parse YAML file at {config_path} — {e}")
 
     if not isinstance(config, dict):
-        raise TypeError(f"❌ Config file did not parse into a dictionary: {config_path}")
+        raise TypeError(f"ERROR: Config file did not parse into a dictionary: {config_path}")
 
-    logging.debug(f"🛠️ Loaded config from: {config_path}")
-    logging.debug(f"🔑 Top-level keys: {list(config.keys())}")
+    logging.debug(f"DEBUG: Loaded config from: {config_path}")
+    logging.debug(f"DEBUG: Top-level keys: {list(config.keys())}")
 
     return config
 
@@ -52,4 +52,4 @@ def save_config(config: dict, path: str = "config.yaml"):
     with open(config_path, "w") as f:
         yaml.dump(config, f, sort_keys=False)
 
-    logging.info(f"✅ Saved config to {config_path}")
+    logging.info(f"SUCCESS: Saved config to {config_path}")

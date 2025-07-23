@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from arch import arch_model
 from scipy.stats import t
+from pathlib import Path
 
 # === Load Config ===
 def load_config(path="config.yaml"):
@@ -84,7 +85,7 @@ def reconstruct_price_series(ticker, series, proxy_series, proxy_returns, random
         try:
             sim_returns = simulate_garch_returns(proxy_returns, len(remaining_dates), random_state=random_state)
         except Exception as e:
-            logging.warning(f"⚠️ GARCH failed for {ticker}: {e}")
+            logging.warning(f"WARNING: GARCH failed for {ticker}: {e}")
             return pd.concat([backfilled, series.loc[first_valid:]]), pd.concat([sources, pd.Series("REAL", index=series.loc[first_valid:].index)])
 
         price = backfilled.dropna().iloc[0] if len(backfilled.dropna()) > 0 else anchor_price
@@ -137,15 +138,17 @@ def reconstruct_missing_prices(raw_prices, portfolio_tickers, config_path="confi
             backfilled, sources = reconstruct_price_series(ticker, orig, proxy_series, proxy_returns, random_state=random_state)
             prices[ticker] = backfilled
             source_matrix[ticker] = sources
-            logging.info(f"✅ Reconstructed: {ticker} using proxy {proxy}")
+            logging.info(f"SUCCESS: Reconstructed: {ticker} using proxy {proxy}")
         except Exception as e:
-            logging.warning(f"❌ Error reconstructing {ticker}: {e}")
+            logging.warning(f"ERROR: Error reconstructing {ticker}: {e}")
 
     output_path = config["paths"]["recon_prices_output"]
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     prices.to_csv(output_path, float_format="%.4f")
 
     source_output = config["paths"].get("recon_sources_output", "recon_sources.csv")
+    Path(source_output).parent.mkdir(parents=True, exist_ok=True)
     source_matrix.to_csv(source_output)
-    logging.info(f"✅ Saved reconstruction sources: {source_output} (shape={source_matrix.shape})")
+    logging.info(f"SUCCESS: Saved reconstruction sources: {source_output} (shape={source_matrix.shape})")
 
     return prices

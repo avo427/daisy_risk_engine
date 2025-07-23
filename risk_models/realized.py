@@ -7,6 +7,7 @@ from pathlib import Path
 import warnings
 from arch.__future__ import reindexing
 from arch.univariate.base import DataScaleWarning
+import os
 
 warnings.filterwarnings("ignore", category=DataScaleWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -90,7 +91,7 @@ def compute_realized_metrics(config_path="config.yaml"):
             })
 
         except Exception as e:
-            logging.warning(f"⚠️ Skipping metrics for {t}: {e}")
+            logging.warning(f"WARNING: Skipping metrics for {t}: {e}")
 
     # Portfolio-level metrics
     try:
@@ -135,7 +136,7 @@ def compute_realized_metrics(config_path="config.yaml"):
         })
 
     except Exception as e:
-        logging.warning(f"⚠️ Skipping portfolio metrics: {e}")
+        logging.warning(f"WARNING: Skipping portfolio metrics: {e}")
 
     metrics_df = pd.DataFrame(metrics)
     cols = metrics_df.columns.tolist()
@@ -173,6 +174,8 @@ def compute_realized_metrics(config_path="config.yaml"):
         if col in metrics_df.columns:
             metrics_df[col] = metrics_df[col].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
 
+    # Ensure data directory exists before saving
+    os.makedirs("data", exist_ok=True)
     metrics_df.to_csv("data/realized_metrics.csv", index=False)
 
     # === Correlation Matrix ===
@@ -233,7 +236,7 @@ def compute_realized_metrics(config_path="config.yaml"):
         realized_roll_path.parent.mkdir(parents=True, exist_ok=True)
         roll_df.to_csv(realized_roll_path, index=False)
 
-    logging.info("✅ Realized metrics computed and saved.")
+    logging.info("SUCCESS: Realized metrics computed and saved.")
 
 if __name__ == "__main__":
     compute_realized_metrics()

@@ -1,12 +1,13 @@
+import warnings
+import logging
 import pandas as pd
 import numpy as np
 import yaml
-import logging
-import warnings
-from pathlib import Path
 from arch import arch_model
 from arch.univariate.base import ConvergenceWarning
 from scipy.stats import norm
+import os
+from pathlib import Path
 
 # === Suppress convergence warnings and specific optimizer messages ===
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
@@ -66,7 +67,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
             fcast = res.forecast(horizon=1)
             row["GARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
         except Exception as e:
-            logging.warning(f"⚠️ GARCH fitting failed for {t}: {e}")
+            logging.warning(f"WARNING: GARCH fitting failed for {t}: {e}")
             row["GARCH_VOL"] = np.nan
 
         try:
@@ -75,7 +76,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
             fcast = res.forecast(horizon=1)
             row["EGARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
         except Exception as e:
-            logging.warning(f"⚠️ EGARCH fitting failed for {t}: {e}")
+            logging.warning(f"WARNING: EGARCH fitting failed for {t}: {e}")
             row["EGARCH_VOL"] = np.nan
 
         mu, sigma = r.mean(), r.std()
@@ -105,7 +106,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
         fcast = res.forecast(horizon=1)
         port_row["GARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
     except Exception as e:
-        logging.warning(f"⚠️ GARCH fitting failed for portfolio: {e}")
+        logging.warning(f"WARNING: GARCH fitting failed for portfolio: {e}")
         port_row["GARCH_VOL"] = np.nan
 
     try:
@@ -114,7 +115,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
         fcast = res.forecast(horizon=1)
         port_row["EGARCH_VOL"] = np.sqrt(fcast.variance.values[-1, 0]) / 100 * np.sqrt(annual_factor)
     except Exception as e:
-        logging.warning(f"⚠️ EGARCH fitting failed for portfolio: {e}")
+        logging.warning(f"WARNING: EGARCH fitting failed for portfolio: {e}")
         port_row["EGARCH_VOL"] = np.nan
 
     mu, sigma = port_ret.mean(), port_ret.std()
@@ -148,7 +149,10 @@ def compute_forecast_metrics(config_path="config.yaml"):
         if col in df.columns:
             df[col] = df[col].apply(lambda x: f"${x:,.0f}" if pd.notnull(x) else "")
 
-    df.to_csv(config["paths"]["forecast_output"], index=False)
+    # Ensure directory exists before saving
+    forecast_output_path = Path(config["paths"]["forecast_output"])
+    forecast_output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(forecast_output_path, index=False)
 
     # === Volatility-Based Sizing and Risk Contribution ===
     try:
@@ -222,11 +226,13 @@ def compute_forecast_metrics(config_path="config.yaml"):
                     "Forecast_Risk_%": 100 * risk_contribution / total_risk if total_risk > 0 else np.nan
                 })
 
+        # Ensure data directory exists before saving
+        os.makedirs("data", exist_ok=True)
         pd.DataFrame(records).to_csv("data/vol_sizing_weights_long.csv", index=False)
         pd.DataFrame(contrib_records).to_csv("data/forecast_risk_contributions.csv", index=False)
-        logging.info("✅ Volatility-based sizing and risk contribution saved.")
+        logging.info("SUCCESS: Volatility-based sizing and risk contribution saved.")
     except Exception as e:
-        logging.warning(f"⚠️ Volatility sizing or risk contribution failed: {e}")
+        logging.warning(f"WARNING: Volatility sizing or risk contribution failed: {e}")
 
     # === Forecast Volatility (Rolling, Long Format for Charts) ===
     try:
@@ -341,7 +347,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
                     except:
                         continue
         else:
-            logging.warning(f"⚠️ Not enough data for PORTFOLIO rolling forecast: only {len(port_ret)} rows")
+            logging.warning(f"WARNING: Not enough data for PORTFOLIO rolling forecast: only {len(port_ret)} rows")
 
         # --- Save Output ---
         df_vol = pd.DataFrame(vol_records)
@@ -350,14 +356,14 @@ def compute_forecast_metrics(config_path="config.yaml"):
 
         try:
             df_vol.to_csv(rolling_out_path, index=False)
-            logging.info(f"✅ Forecast rolling volatility saved to: {rolling_out_path}")
+            logging.info(f"SUCCESS: Forecast rolling volatility saved to: {rolling_out_path}")
         except PermissionError:
-            logging.warning(f"⚠️ File permission error. Close the file if open: {rolling_out_path}")
+            logging.warning(f"WARNING: File permission error. Close the file if open: {rolling_out_path}")
 
     except Exception as e:
-        logging.warning(f"⚠️ Failed to generate forecast rolling volatility: {e}")
+        logging.warning(f"WARNING: Failed to generate forecast rolling volatility: {e}")
 
-    logging.info("✅ Forecast metrics computed and saved.")
+    logging.info("SUCCESS: Forecast metrics computed and saved.")
 
 if __name__ == "__main__":
     compute_forecast_metrics()

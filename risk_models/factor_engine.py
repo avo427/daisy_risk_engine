@@ -14,7 +14,7 @@ def load_config(config_path=None):
         with open(config_path, "r") as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        print(f"❌ Config file not found at {config_path}")
+        print(f"ERROR: Config file not found at {config_path}")
         sys.exit(1)
 
 # === Rolling OLS regression with aligned data ===
@@ -31,7 +31,7 @@ def run_rolling_ols(y, X, window):
             betas.iloc[i] = model.coef_
             r2_scores.iloc[i] = r2_score(y_window, model.predict(X_window))
         except Exception as e:
-            print(f"❌ Fit failed at index {i}: {e}")
+            print(f"ERROR: Fit failed at index {i}: {e}")
             continue
 
     return betas, r2_scores
@@ -57,7 +57,7 @@ def main():
     factors = pd.read_csv(paths["factor_returns"], index_col=0, parse_dates=True).dropna(how="all")
 
     if factors.empty:
-        print("❌ factor_returns.csv is empty — aborting.")
+        print("ERROR: factor_returns.csv is empty — aborting.")
         return
 
     # Identify active tickers (Weight > 0)
@@ -82,10 +82,10 @@ def main():
         ticker_list = [t for t in prices.columns if t.upper() in active_tickers]
         targets = [t for t in targets if t != "TICKERS"] + ticker_list
 
-    print(f"📊 Regressing on targets: {targets}")
-    print(f"📈 Available return series: {list(all_returns.keys())}")
-    print(f"📉 Factor matrix shape: {factors.shape}")
-    print(f"📅 Factor returns date range: {factors.index.min()} → {factors.index.max()}")
+    print(f"ANALYSIS: Regressing on targets: {targets}")
+    print(f"RETURNS: Available return series: {list(all_returns.keys())}")
+    print(f"FACTORS: Factor matrix shape: {factors.shape}")
+    print(f"DATES: Factor returns date range: {factors.index.min()} → {factors.index.max()}")
 
     exposures_list = []
     latest_expo = []
@@ -94,7 +94,7 @@ def main():
     for name in targets:
         y = all_returns.get(name)
         if y is None or y.dropna().empty:
-            print(f"⚠️ Skipping {name} — no valid return series.")
+            print(f"WARNING: Skipping {name} — no valid return series.")
             continue
 
         # Align y and factors to common index
@@ -108,10 +108,10 @@ def main():
         X_final = X_aligned.loc[final_index]
 
         if len(y_final) < window:
-            print(f"⚠️ Skipping {name} — not enough data after alignment ({len(y_final)} rows)")
+            print(f"WARNING: Skipping {name} — not enough data after alignment ({len(y_final)} rows)")
             continue
 
-        print(f"🔄 Running regression for {name}: {len(y_final)} rows aligned from {final_index.min().date()} to {final_index.max().date()}")
+        print(f"PROCESSING: Running regression for {name}: {len(y_final)} rows aligned from {final_index.min().date()} to {final_index.max().date()}")
 
         try:
             betas, r2 = run_rolling_ols(y_final, X_final, window)
@@ -139,35 +139,37 @@ def main():
                 r2_df["Ticker"] = name
                 r2_list.append(r2_df)
         except Exception as e:
-            print(f"❌ Regression failed for {name}: {e}")
+            print(f"ERROR: Regression failed for {name}: {e}")
 
     if not exposures_list and not r2_list:
-        raise RuntimeError("❌ No factor regressions succeeded. Check return matrix and targets.")
+        raise RuntimeError("ERROR: No factor regressions succeeded. Check return matrix and targets.")
 
     # === Save static factor exposures (latest only) ===
     if latest_expo:
         df_static = pd.DataFrame(latest_expo)
         Path(paths["factor_exposures"]).parent.mkdir(parents=True, exist_ok=True)
         df_static.to_csv(paths["factor_exposures"], index=False)
-        print(f"✅ Saved latest factor exposures to {paths['factor_exposures']}")
+        print(f"SUCCESS: Saved latest factor exposures to {paths['factor_exposures']}")
     else:
-        print("⚠️ No static factor exposures saved.")
+        print("WARNING: No static factor exposures saved.")
 
     # === Save rolling factor betas in long format ===
     if exposures_list:
         df_rolling = pd.concat(exposures_list).melt(id_vars=["Date", "Ticker"], var_name="Factor", value_name="Beta").dropna()
+        Path(paths["factor_rolling_long"]).parent.mkdir(parents=True, exist_ok=True)
         df_rolling.to_csv(paths["factor_rolling_long"], index=False)
-        print(f"✅ Saved rolling exposures to {paths['factor_rolling_long']}")
+        print(f"SUCCESS: Saved rolling exposures to {paths['factor_rolling_long']}")
     else:
-        print("⚠️ No rolling exposures generated.")
+        print("WARNING: No rolling exposures generated.")
 
     # === Save rolling R² ===
     if r2_list:
         df_r2 = pd.concat(r2_list).dropna()
+        Path(paths["r2_rolling_long"]).parent.mkdir(parents=True, exist_ok=True)
         df_r2.to_csv(paths["r2_rolling_long"], index=False)
-        print(f"✅ Saved rolling R² to {paths['r2_rolling_long']}")
+        print(f"SUCCESS: Saved rolling R² to {paths['r2_rolling_long']}")
     else:
-        print("⚠️ No R² data generated.")
+        print("WARNING: No R² data generated.")
 
 if __name__ == "__main__":
     main()

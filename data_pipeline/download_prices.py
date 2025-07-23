@@ -34,11 +34,11 @@ def download_prices(config: dict) -> pd.DataFrame:
     for t in universe:
         try:
             assert isinstance(t, str), f"Ticker is not a string: {t}"
-            logging.debug(f"🔍 Downloading: {t}")
+            logging.debug(f"FETCHING: Downloading: {t}")
             data = yf.download(t, start=start, end=end, auto_adjust=False, progress=False, threads=False)
 
             if data.empty:
-                logging.warning(f"⚠️ No data for {t}")
+                logging.warning(f"WARNING: No data for {t}")
                 continue
 
             col = "Adj Close" if total_returns else "Close"
@@ -52,12 +52,12 @@ def download_prices(config: dict) -> pd.DataFrame:
             all_prices[t] = series.rename(t)
 
         except Exception as e:
-            logging.warning(f"⚠️ Failed to download {t}: {e}")
+            logging.warning(f"WARNING: Failed to download {t}: {e}")
 
     price_df = pd.DataFrame(all_prices).ffill()
 
     os.makedirs(os.path.dirname(raw_output_path), exist_ok=True)
     price_df.to_csv(raw_output_path, float_format="%.4f")
 
-    logging.info(f"✅ Saved raw price matrix: {raw_output_path} (shape={price_df.shape})")
+    logging.info(f"SUCCESS: Saved raw price matrix: {raw_output_path} (shape={price_df.shape})")
     return price_df

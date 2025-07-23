@@ -23,14 +23,14 @@ try:
     from risk_models.factor_loader import main as run_factor_loader
     from risk_models.factor_engine import main as build_factors
 except ImportError as e:
-    logging.error(f"❌ Import error: {e}")
+    logging.error(f"ERROR: Import error: {e}")
     raise
 
 # === Load Config ===
 def load_config(path=None):
     path = Path(path or Path(__file__).resolve().parent / "config.yaml")
     if not path.exists():
-        raise FileNotFoundError(f"❌ config.yaml not found at: {path}")
+        raise FileNotFoundError(f"ERROR: config.yaml not found at: {path}")
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
@@ -38,23 +38,23 @@ def load_config(path=None):
 def initialize_pipeline():
     config = load_config()
     df_weights = load_portfolio_from_excel(config_path=str(Path(__file__).resolve().parent / "config.yaml"))
-    logging.info(f"✅ Loaded portfolio with {len(df_weights)} tickers")
+    logging.info(f"SUCCESS: Loaded portfolio with {len(df_weights)} tickers")
 
     price_data = download_prices(config)
-    logging.info("✅ Downloaded raw price data")
+    logging.info("SUCCESS: Downloaded raw price data")
 
     raw_prices = price_data.dropna(axis=0, how="all")
     portfolio_df = pd.read_csv(config["paths"]["portfolio_weights"])
     portfolio_tickers = set(portfolio_df["Ticker"].str.upper())
 
     reconstruct_missing_prices(raw_prices, portfolio_tickers)
-    logging.info("✅ Reconstructed missing price history")
+    logging.info("SUCCESS: Reconstructed missing price history")
 
     return config
 
 # === Function 1: Full Pipeline ===
 def run_full_pipeline():
-    logging.info("🚀 Running Full Pipeline")
+    logging.info("RUNNING: Full Pipeline")
     start = time.time()
     status = "success"
 
@@ -62,26 +62,26 @@ def run_full_pipeline():
         config = initialize_pipeline()
 
         compute_realized_metrics(config_path=str(Path(__file__).resolve().parent / "config.yaml"))
-        logging.info("✅ Computed realized metrics")
+        logging.info("SUCCESS: Computed realized metrics")
 
         compute_forecast_metrics(config_path=str(Path(__file__).resolve().parent / "config.yaml"))
-        logging.info("✅ Computed forecast metrics")
+        logging.info("SUCCESS: Computed forecast metrics")
 
         run_factor_loader()
-        logging.info("✅ Ran factor loader to generate factor returns")
+        logging.info("SUCCESS: Ran factor loader to generate factor returns")
 
         build_factors()
-        logging.info("✅ Ran factor engine to process factor exposure")
+        logging.info("SUCCESS: Ran factor engine to process factor exposure")
 
     except Exception as e:
-        logging.error(f"❌ Full pipeline failed: {e}")
+        logging.error(f"ERROR: Full pipeline failed: {e}")
         status = "failed"
 
     save_runtime_info(config, status, start)
 
 # === Function 2: Risk Analysis ===
 def run_risk_analysis():
-    logging.info("🧮 Running Risk Analysis (Realized + Forecast)")
+    logging.info("RUNNING: Risk Analysis (Realized + Forecast)")
     start = time.time()
     status = "success"
 
@@ -89,20 +89,20 @@ def run_risk_analysis():
         config = initialize_pipeline()
 
         compute_realized_metrics(config_path=str(Path(__file__).resolve().parent / "config.yaml"))
-        logging.info("✅ Computed realized metrics")
+        logging.info("SUCCESS: Computed realized metrics")
 
         compute_forecast_metrics(config_path=str(Path(__file__).resolve().parent / "config.yaml"))
-        logging.info("✅ Computed forecast metrics")
+        logging.info("SUCCESS: Computed forecast metrics")
 
     except Exception as e:
-        logging.error(f"❌ Risk analysis failed: {e}")
+        logging.error(f"ERROR: Risk analysis failed: {e}")
         status = "failed"
 
     save_runtime_info(config, status, start)
 
 # === Function 3: Factor Exposure ===
 def run_factor_exposure():
-    logging.info("📊 Running Factor Exposure (Construction + Regression)")
+    logging.info("ANALYSIS: Running Factor Exposure (Construction + Regression)")
     start = time.time()
     status = "success"
 
@@ -110,13 +110,13 @@ def run_factor_exposure():
         config = initialize_pipeline()
 
         run_factor_loader()
-        logging.info("✅ Ran factor loader to generate factor returns")
+        logging.info("SUCCESS: Ran factor loader to generate factor returns")
 
         build_factors()
-        logging.info("✅ Ran factor engine to process factor exposure")
+        logging.info("SUCCESS: Ran factor engine to process factor exposure")
 
     except Exception as e:
-        logging.error(f"❌ Factor exposure failed: {e}")
+        logging.error(f"ERROR: Factor exposure failed: {e}")
         status = "failed"
 
     save_runtime_info(config, status, start)
@@ -135,9 +135,9 @@ def save_runtime_info(config, status, start_time):
     try:
         with open(runtime_output_path, "w") as f:
             json.dump(runtime_info, f, indent=2)
-        logging.info(f"📦 Saved runtime info to {runtime_output_path}")
+        logging.info(f"SAVED: Runtime info to {runtime_output_path}")
     except Exception as e:
-        logging.warning(f"⚠️ Failed to write runtime info: {e}")
+        logging.warning(f"WARNING: Failed to write runtime info: {e}")
 
 # === Main Function — Controlled by app.py ===
 def main(mode="full"):
@@ -148,7 +148,7 @@ def main(mode="full"):
     elif mode == "factor":
         run_factor_exposure()
     else:
-        logging.error(f"❌ Invalid mode: {mode}. Use 'full', 'risk', or 'factor'.")
+        logging.error(f"ERROR: Invalid mode: {mode}. Use 'full', 'risk', or 'factor'.")
 
 # === CLI Entry Point (for manual testing) ===
 if __name__ == "__main__":
