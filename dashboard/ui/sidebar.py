@@ -8,6 +8,8 @@ def render_sidebar(config, save_config, load_all_data, project_root, paths, user
     risk_free_rate = st.number_input("Risk-Free Rate", min_value=0.0, max_value=0.2,
                                      value=user_settings.get("risk_free_rate", 0.05), step=0.001)
     random_state = st.number_input("Random Seed", min_value=0, value=user_settings.get("random_state", 42), step=1)
+    monte_carlo_simulations = st.number_input("Monte Carlo Simulations", min_value=1000, max_value=100000, 
+                                             value=user_settings.get("monte_carlo_simulations", 10000), step=1000)
     total_returns = st.checkbox("Use Total Returns", value=user_settings.get("total_returns", True))
 
     if st.button("Save Settings"):
@@ -15,6 +17,7 @@ def render_sidebar(config, save_config, load_all_data, project_root, paths, user
         config["user_settings"]["total_returns"] = total_returns
         config["user_settings"]["risk_free_rate"] = float(risk_free_rate)
         config["user_settings"]["random_state"] = int(random_state)
+        config["user_settings"]["monte_carlo_simulations"] = int(monte_carlo_simulations)
         save_config(config)
         st.success("Settings saved to config.yaml")
         st.cache_data.clear()
@@ -26,8 +29,9 @@ def render_sidebar(config, save_config, load_all_data, project_root, paths, user
 
     pipeline_option = st.radio(
         "Select the pipeline to run",
-        ["Full Pipeline", "Risk Analysis", "Factor Exposure"],
-        index=0
+        ["Full Pipeline", "Risk Analysis", "Factor Exposure", "Stress Testing"],
+        index=0,
+        help="Full Pipeline: Complete analysis (realized + forecast + factor exposure + stress testing). Risk Analysis: Realized and forecast metrics only. Factor Exposure: Factor returns and portfolio exposures. Stress Testing: Factor exposure + comprehensive stress tests."
     )
 
     if st.button("Run Daisy Risk Engine"):
@@ -36,7 +40,8 @@ def render_sidebar(config, save_config, load_all_data, project_root, paths, user
         mode_map = {
             "Full Pipeline": "full",
             "Risk Analysis": "risk",
-            "Factor Exposure": "factor"
+            "Factor Exposure": "factor",
+            "Stress Testing": "stress"
         }
         selected_mode = mode_map[pipeline_option]
         with st.spinner(f"Running {pipeline_option}... Please wait."):

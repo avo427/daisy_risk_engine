@@ -7,9 +7,10 @@ The **Daisy Risk Engine** is a comprehensive **quantitative risk management plat
 
 The engine is modular, and you can run the following components independently:
 
-1. **Full Pipeline**: Runs the entire pipeline, including risk analysis and factor exposure.
-2. **Risk Analysis**: Computes the realized and forecasted risk metrics.
+1. **Full Pipeline**: Runs the entire pipeline (realized + forecast + factor exposure + stress testing) in the correct dependency order.
+2. **Risk Analysis**: Computes the realized and forecasted risk metrics only (no stress testing).
 3. **Factor Exposure**: Analyzes the exposure to different factors and computes the factor returns.
+4. **Stress Testing**: Runs factor exposure first, then comprehensive stress tests (historical scenarios, Monte Carlo, factor stress, regime analysis).
 
 The system is designed for portfolio managers and quantitative risk analysts to **interact with data**, **adjust risk parameters**, and **visualize** various financial metrics through an intuitive **Streamlit** dashboard.
 
@@ -28,6 +29,12 @@ The system is designed for portfolio managers and quantitative risk analysts to 
 
 - **Volatility-Based Sizing**: 
   - Adjust portfolio positions based on **volatility forecasts**, ensuring that more volatile assets have lower weight.
+
+- **🧪 Stress Testing**: 
+  - **Historical Scenario Analysis**: Test against major market events (2008 Crisis, 2020 COVID, 2022 Inflation, etc.)
+  - **Monte Carlo Simulations**: Advanced simulations with fat-tailed distributions (configurable 10,000+ simulations)
+  - **Factor-Based Stress Tests**: Test sensitivity to factor shocks (Tech crash, rate spikes, volatility explosion, etc.)
+  - **Regime-Dependent Analysis**: Adaptive testing based on current market conditions
 
 - **Thematic and Proxy Management**: 
   - Define and adjust **themes** and **proxies** to guide stock selection and factor analysis.
@@ -62,9 +69,10 @@ The **Daisy Risk Engine** is composed of several independent, modular components
 
 The **Streamlit** dashboard is designed to provide an easy-to-use interface for controlling the risk engine pipeline and visualizing results. Users can:
 
-- **Run Pipeline Components**: Execute the full pipeline or specific components like risk analysis or factor exposure.
-- **View Metrics**: View both realized and forecasted metrics, factor exposures, and portfolio sizing.
+- **Run Pipeline Components**: Execute the full pipeline or specific components (risk analysis, factor exposure, or stress testing).
+- **View Metrics**: View both realized and forecasted metrics, factor exposures, portfolio sizing, and comprehensive stress test results.
 - **Visualize Results**: Explore various interactive **charts**, **graphs**, and **tables** to make data-driven decisions.
+- **Static Tab Structure**: Clean, simple interface with 7 tabs: Realized Risk, Forecast Risk, Factor Exposure, Stress Testing, Volatility-Based Sizing, Themes & Proxies, and Reconstructed Prices.
 
 ---
 
@@ -108,7 +116,8 @@ Follow these steps to install and run the **Daisy Risk Engine**:
     ```
 
 5. **Running the pipeline**:
-    - From the **Streamlit interface**, you can choose to run the full pipeline or specific components (`full`, `risk`, or `factor`).
+    - From the **Streamlit interface**, you can choose to run the full pipeline or specific components (`full`, `risk`, `factor`, or `stress`).
+    - **User Settings**: Configure years of history, risk-free rate, random seed, Monte Carlo simulations, and total returns preference.
 
 ---
 
@@ -206,9 +215,85 @@ Follow these steps to install and run the **Daisy Risk Engine**:
 
 ---
 
+## 🧪 Stress Testing Module
+
+The Daisy Risk Engine includes a sophisticated stress testing module that incorporates methodologies from leading quantitative research institutions like Bridgewater Associates and Citadel Securities.
+
+### Stress Testing Features
+
+#### Historical Scenario Analysis
+Test portfolio performance against major market events:
+- **2008 Financial Crisis**: Lehman Brothers collapse and global financial meltdown
+- **2020 COVID-19 Crash**: Pandemic-driven market crash and recovery
+- **2022 Inflation Shock**: Inflation-driven market correction
+- **2018 Q4 Volatility**: Volatility spike and market stress
+- **2020 Recovery**: Post-COVID recovery rally
+
+#### Monte Carlo Simulations
+Advanced simulations with fat-tailed distributions:
+- Configurable simulation parameters (10,000+ simulations)
+- Multiple confidence levels for VaR/CVaR (95%, 99%, 99.5%)
+- Tail risk analysis and extreme value theory
+- Custom time horizons (30-500 days)
+
+#### Factor-Based Stress Testing
+Test portfolio sensitivity to factor shocks using linear factor models:
+- **Technology Sector Crash**: AI and market factor shocks (-25%)
+- **Interest Rate Spike**: Rate sensitivity analysis (+50%)
+- **Volatility Explosion**: VIX regime changes (+200%)
+- **Momentum Reversal**: Momentum factor breakdown (-30%)
+- **Liquidity Crisis**: Small cap and low vol stress (-20%)
+
+#### Regime-Dependent Analysis
+Adaptive stress testing based on current market conditions:
+- Volatility regime detection (normal, high, extreme)
+- Correlation regime analysis
+- Dynamic scenario adjustment
+- Real-time market condition monitoring
+
+### Usage
+
+#### Command Line
+```bash
+# Run comprehensive stress testing
+python main.py --mode stress
+
+# Run specific stress test from Python
+from risk_models.stress_test import StressTestEngine
+
+engine = StressTestEngine("config.yaml")
+results = engine.run_comprehensive_stress_test()
+```
+
+#### Dashboard Interface
+1. Launch the Streamlit dashboard: `streamlit run dashboard/app.py`
+2. Navigate to the "Stress Testing" tab
+3. **Automatic Results**: Stress test results load automatically when available
+4. **Comprehensive Visualization**: View historical scenarios, Monte Carlo results, factor stress tests, and regime analysis with interactive charts and detailed metrics
+
+### Output
+
+Stress test results are saved to `data/stress_test_results.json` and include:
+
+- **Portfolio-level metrics** for each scenario
+- **Position-level analysis** with individual asset performance
+- **Correlation breakdown analysis** during stress periods
+- **Tail risk metrics** (VaR, CVaR at multiple confidence levels)
+- **Executive summary** with actionable recommendations
+
+### Configuration
+
+The stress testing module uses the same configuration file (`config.yaml`) as the rest of the system. Key stress test settings include:
+- **Monte Carlo simulations**: Configurable number of simulations (default: 10,000)
+- **Risk-free rate**: Used for Sharpe ratio calculations
+- **Trading days per year**: For annualization of metrics
+- **Random seed**: For reproducible Monte Carlo results
+
+---
+
 ## Conclusion
 
-The **Daisy Risk Engine** provides a **robust framework** for evaluating portfolio risk and performance. It integrates portfolio management, risk analysis, forecasting, and factor analysis into a single, **unified platform**. With a **modular design** and clear input/output separation, this system enables users to **compute** and **visualize** various financial metrics essential for making **data-driven investment decisions**.
+The **Daisy Risk Engine** provides a **robust framework** for evaluating portfolio risk and performance. It integrates portfolio management, risk analysis, forecasting, factor analysis, and **institutional-grade stress testing** into a single, **unified platform**. With a **modular design** and clear input/output separation, this system enables users to **compute** and **visualize** various financial metrics essential for making **data-driven investment decisions**.
 
 ---
 

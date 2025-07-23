@@ -3,6 +3,7 @@ user_settings:
   trading_days_per_year: 252
   total_returns: true
   random_state: 44
+  monte_carlo_simulations: 10000      # Number of Monte Carlo simulations
   risk_free_rate: 0.05
   starting_portfolio_value: 100000
   factor_regression_window: 60        # Rolling window in days
@@ -27,6 +28,7 @@ paths:
   factor_exposures: data/factor_exposures.csv
   factor_rolling_long: data/rolling_metrics/factor_rolling_long.csv
   r2_rolling_long: data/rolling_metrics/r2_rolling_long.csv
+  stress_test_output: data/stress_test_results.json
 loader:
   excel_path: ../Portfolio.xlsm
   sheet_name: Dashboard
@@ -38,7 +40,7 @@ loader:
   versioned_output_dir: data/weights_versions/
 theme_proxies:
   AI Compute & Hardware: SOXX
-  Cloud Infra & SaaS: WCLD
+  Cloud Infra & SaaS: SKYY
   Cybersecurity: CIBR
   Frontier / Deep Tech: ARKX
   Disruptive / IPO Tech: ARKK

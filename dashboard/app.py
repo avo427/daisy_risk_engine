@@ -17,6 +17,7 @@ from ui.tabs.sizing import sizing_tab
 from ui.tabs.factors import factors_tab
 from ui.tabs.themes import themes_tab
 from ui.tabs.prices import prices_tab
+from ui.tabs.stress_test import stress_test_tab
 
 # === Load Config ===
 config = load_config(project_root)
@@ -47,25 +48,34 @@ df_vol = st.session_state.get("vol", pd.DataFrame())
 df_forecast = st.session_state.get("forecast", pd.DataFrame())
 df_fore_roll = st.session_state.get("forecast_roll", pd.DataFrame())
 
-# === Tabs ===
-tabs = st.tabs([
-    "Realized Risk",
-    "Forecast Risk",
-    "Volatility-Based Sizing",
-    "Factor Exposure",
-    "Themes & Proxies",
-    "Reconstructed Prices"
+# === Simple Tab Management ===
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "Realized Risk", 
+    "Forecast Risk", 
+    "Factor Exposure", 
+    "Stress Testing", 
+    "Volatility-Based Sizing", 
+    "Reconstructed Prices",
+    "Themes & Proxies"
 ])
 
-with tabs[0]:
+with tab1:
     realized_tab(df_realized, df_roll, df_corr, df_vol)
-with tabs[1]:
+
+with tab2:
     forecast_tab(df_forecast, df_fore_roll, project_root, paths)
-with tabs[2]:
-    sizing_tab(project_root, paths)
-with tabs[3]:
+
+with tab3:
     factors_tab(project_root, paths)
-with tabs[4]:
-    themes_tab(config, lambda c: save_config(project_root, c))
-with tabs[5]:
+
+with tab4:
+    stress_test_tab(project_root, paths)
+
+with tab5:
+    sizing_tab(project_root, paths)
+
+with tab6:
     prices_tab(project_root, paths)
+
+with tab7:
+    themes_tab(config, lambda c: save_config(project_root, c))

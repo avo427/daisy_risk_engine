@@ -10,3 +10,4 @@ PyYAML
 openpyxl
 arch
 streamlit
+seaborn

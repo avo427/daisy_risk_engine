@@ -22,6 +22,7 @@ try:
     from risk_models.forecast import compute_forecast_metrics
     from risk_models.factor_loader import main as run_factor_loader
     from risk_models.factor_engine import main as build_factors
+    from risk_models.stress_test import run_stress_test
 except ImportError as e:
     logging.error(f"ERROR: Import error: {e}")
     raise
@@ -73,6 +74,10 @@ def run_full_pipeline():
         build_factors()
         logging.info("SUCCESS: Ran factor engine to process factor exposure")
 
+        # Run stress testing after factor engine (required for factor stress tests)
+        output_path = run_stress_test(config_path=str(Path(__file__).resolve().parent / "config.yaml"))
+        logging.info(f"SUCCESS: Stress testing completed, results saved to {output_path}")
+
     except Exception as e:
         logging.error(f"ERROR: Full pipeline failed: {e}")
         status = "failed"
@@ -81,7 +86,7 @@ def run_full_pipeline():
 
 # === Function 2: Risk Analysis ===
 def run_risk_analysis():
-    logging.info("RUNNING: Risk Analysis (Realized + Forecast)")
+    logging.info("RUNNING: Risk Analysis (Realized + Forecast Metrics)")
     start = time.time()
     status = "success"
 
@@ -121,6 +126,36 @@ def run_factor_exposure():
 
     save_runtime_info(config, status, start)
 
+# === Function 4: Stress Testing ===
+def run_stress_testing():
+    logging.info("TESTING: Running Stress Testing Suite (with Factor Exposure)")
+    start = time.time()
+    status = "success"
+
+    try:
+        config = initialize_pipeline()
+
+        # First run factor exposure pipeline (required for stress testing)
+        logging.info("STEP 1: Running factor exposure pipeline...")
+        run_factor_loader()
+        logging.info("SUCCESS: Ran factor loader to generate factor returns")
+
+        build_factors()
+        logging.info("SUCCESS: Ran factor engine to process factor exposure")
+
+        # Then run stress testing
+        logging.info("STEP 2: Running stress testing...")
+        output_path = run_stress_test(config_path=str(Path(__file__).resolve().parent / "config.yaml"))
+        logging.info(f"SUCCESS: Stress testing completed, results saved to {output_path}")
+
+    except Exception as e:
+        logging.error(f"ERROR: Stress testing failed: {e}")
+        status = "failed"
+
+    save_runtime_info(config, status, start)
+
+
+
 # === Utility: Save Runtime Info ===
 def save_runtime_info(config, status, start_time):
     runtime_info = {
@@ -147,13 +182,15 @@ def main(mode="full"):
         run_risk_analysis()
     elif mode == "factor":
         run_factor_exposure()
+    elif mode == "stress":
+        run_stress_testing()
     else:
-        logging.error(f"ERROR: Invalid mode: {mode}. Use 'full', 'risk', or 'factor'.")
+        logging.error(f"ERROR: Invalid mode: {mode}. Use 'full', 'risk', 'factor', or 'stress'.")
 
 # === CLI Entry Point (for manual testing) ===
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["full", "risk", "factor"], default="full", help="Which pipeline to run")
+    parser.add_argument("--mode", choices=["full", "risk", "factor", "stress"], default="full", help="Which pipeline to run")
     args = parser.parse_args()
     main(mode=args.mode)
