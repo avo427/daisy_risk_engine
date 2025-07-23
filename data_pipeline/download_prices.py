@@ -22,8 +22,8 @@ def download_prices(config: dict) -> pd.DataFrame:
     benchmark_set = {"^SPX", "^NDX"}
     universe = sorted(tickers | proxy_set | benchmark_set)
 
-    logging.info(f"📡 Downloading Yahoo Finance data for {len(universe)} tickers...")
-    logging.debug(f"🔎 Final ticker universe: {universe}")
+    logging.info(f"Downloading Yahoo Finance data for {len(universe)} tickers...")
+    logging.debug(f"Final ticker universe: {universe}")
 
     # Use calendar-based window
     start = pd.Timestamp.today().normalize() - pd.DateOffset(years=years)

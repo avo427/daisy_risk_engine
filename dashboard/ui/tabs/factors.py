@@ -6,12 +6,13 @@ from pathlib import Path
 def factors_tab(project_root, paths):
     st.subheader("Latest Factor Exposures")
     weights_path = project_root / paths["portfolio_weights"]
-    exposures_path = project_root / paths["factor_exposures"]
     df_weights = pd.read_csv(weights_path)
     valid_tickers = set(df_weights[df_weights["Weight"] > 0]["Ticker"].str.upper())
     valid_tickers.update(["^NDX", "^SPX", "PORTFOLIO"])
-    if exposures_path.exists():
-        df_expo = pd.read_csv(exposures_path)
+    
+    # Get factor exposures from session state (cached data)
+    df_expo = st.session_state.get("factor_exposures", pd.DataFrame())
+    if not df_expo.empty:
         df_expo["Date"] = pd.to_datetime(df_expo["Date"])
         latest_date = df_expo["Date"].max()
         df_latest = df_expo[df_expo["Date"] == latest_date].copy()
@@ -31,7 +32,7 @@ def factors_tab(project_root, paths):
         )
     else:
         df_matrix = pd.DataFrame()
-        st.info("No factor exposure file found. Please run the risk engine.")
+        st.info("No factor exposure data found. Please run the factor exposure pipeline.")
     st.subheader("Heatmap of Latest Exposures")
     if not df_matrix.empty:
         fig = px.imshow(
@@ -51,9 +52,9 @@ def factors_tab(project_root, paths):
         fig.update_layout(height=700)
         st.plotly_chart(fig, use_container_width=True)
     st.subheader("Rolling Factor Exposures")
-    rolling_path = project_root / paths["factor_rolling_long"]
-    if rolling_path.exists():
-        df_roll_factors = pd.read_csv(rolling_path)
+    # Get rolling factor data from session state (cached data)
+    df_roll_factors = st.session_state.get("factor_rolling", pd.DataFrame())
+    if not df_roll_factors.empty:
         df_roll_factors["Date"] = pd.to_datetime(df_roll_factors["Date"])
         df_roll_factors["Ticker"] = df_roll_factors["Ticker"].str.upper()
         df_roll_factors = df_roll_factors[df_roll_factors["Ticker"].isin(valid_tickers)]
@@ -82,29 +83,29 @@ def factors_tab(project_root, paths):
             fig.update_layout(height=700)
             st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No rolling factor exposure file found.")
-    st.subheader("Rolling R²")
-    r2_path = project_root / paths["r2_rolling_long"]
-    if r2_path.exists():
-        df_r2 = pd.read_csv(r2_path)
+        st.info("No rolling factor exposure data found. Please run the factor exposure pipeline.")
+    st.subheader("Rolling R2")
+    # Get R2 data from session state (cached data)
+    df_r2 = st.session_state.get("r2_rolling", pd.DataFrame())
+    if not df_r2.empty:
         df_r2["Date"] = pd.to_datetime(df_r2["Date"])
         df_r2["Ticker"] = df_r2["Ticker"].str.upper()
         df_r2 = df_r2[df_r2["Ticker"].isin(valid_tickers)]
         available_r2_tickers = sorted(df_r2["Ticker"].unique())
         default_r2 = ["PORTFOLIO"] if "PORTFOLIO" in available_r2_tickers else available_r2_tickers[:1]
         selected_r2_tickers = st.multiselect(
-            "Select Tickers for R²:", options=available_r2_tickers, default=default_r2
+            "Select Tickers for R2:", options=available_r2_tickers, default=default_r2
         )
         df_r2_filtered = df_r2[df_r2["Ticker"].isin(selected_r2_tickers)]
         if df_r2_filtered.empty:
-            st.warning("No R² data for selected tickers.")
+            st.warning("No R2 data for selected tickers.")
         else:
             fig = px.line(
                 df_r2_filtered,
                 x="Date", y="R2", color="Ticker",
-                title="Rolling R²"
+                title="Rolling R2"
             )
             fig.update_layout(height=700, yaxis_range=[0, 1])
             st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No R² rolling file found.") 
+        st.info("No R2 rolling data found. Please run the factor exposure pipeline.") 

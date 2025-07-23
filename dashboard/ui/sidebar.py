@@ -43,7 +43,8 @@ def render_sidebar(config, save_config, load_all_data, project_root, paths, user
             result = subprocess.run(
                 [sys.executable, str(project_root / "main.py"), "--mode", selected_mode],
                 capture_output=True,
-                text=True
+                text=True,
+                cwd=str(project_root)  # Set working directory to project root
             )
         if result.returncode == 0:
             st.success("SUCCESS: Run completed successfully.")

@@ -139,7 +139,7 @@ def save_runtime_info(config, status, start_time):
     except Exception as e:
         logging.warning(f"WARNING: Failed to write runtime info: {e}")
 
-# === Main Function — Controlled by app.py ===
+# === Main Function - Controlled by app.py ===
 def main(mode="full"):
     if mode == "full":
         run_full_pipeline()

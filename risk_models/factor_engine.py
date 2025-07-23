@@ -57,7 +57,7 @@ def main():
     factors = pd.read_csv(paths["factor_returns"], index_col=0, parse_dates=True).dropna(how="all")
 
     if factors.empty:
-        print("ERROR: factor_returns.csv is empty — aborting.")
+        print("ERROR: factor_returns.csv is empty - aborting.")
         return
 
     # Identify active tickers (Weight > 0)
@@ -85,7 +85,7 @@ def main():
     print(f"ANALYSIS: Regressing on targets: {targets}")
     print(f"RETURNS: Available return series: {list(all_returns.keys())}")
     print(f"FACTORS: Factor matrix shape: {factors.shape}")
-    print(f"DATES: Factor returns date range: {factors.index.min()} → {factors.index.max()}")
+    print(f"DATES: Factor returns date range: {factors.index.min()} -> {factors.index.max()}")
 
     exposures_list = []
     latest_expo = []
@@ -94,7 +94,7 @@ def main():
     for name in targets:
         y = all_returns.get(name)
         if y is None or y.dropna().empty:
-            print(f"WARNING: Skipping {name} — no valid return series.")
+            print(f"WARNING: Skipping {name} - no valid return series.")
             continue
 
         # Align y and factors to common index
@@ -108,7 +108,7 @@ def main():
         X_final = X_aligned.loc[final_index]
 
         if len(y_final) < window:
-            print(f"WARNING: Skipping {name} — not enough data after alignment ({len(y_final)} rows)")
+            print(f"WARNING: Skipping {name} - not enough data after alignment ({len(y_final)} rows)")
             continue
 
         print(f"PROCESSING: Running regression for {name}: {len(y_final)} rows aligned from {final_index.min().date()} to {final_index.max().date()}")
@@ -162,14 +162,14 @@ def main():
     else:
         print("WARNING: No rolling exposures generated.")
 
-    # === Save rolling R² ===
+    # === Save rolling R2 ===
     if r2_list:
         df_r2 = pd.concat(r2_list).dropna()
         Path(paths["r2_rolling_long"]).parent.mkdir(parents=True, exist_ok=True)
         df_r2.to_csv(paths["r2_rolling_long"], index=False)
-        print(f"SUCCESS: Saved rolling R² to {paths['r2_rolling_long']}")
+        print(f"SUCCESS: Saved rolling R2 to {paths['r2_rolling_long']}")
     else:
-        print("WARNING: No R² data generated.")
+        print("WARNING: No R2 data generated.")
 
 if __name__ == "__main__":
     main()

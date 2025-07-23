@@ -25,7 +25,7 @@ def load_config(path: str = "config.yaml") -> dict:
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        raise ValueError(f"ERROR: Failed to parse YAML file at {config_path} — {e}")
+        raise ValueError(f"ERROR: Failed to parse YAML file at {config_path} - {e}")
 
     if not isinstance(config, dict):
         raise TypeError(f"ERROR: Config file did not parse into a dictionary: {config_path}")

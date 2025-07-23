@@ -17,4 +17,7 @@ def load_all_data(project_root, paths):
         "vol": load_csv(project_root / paths["vol_contribution"]),
         "forecast": load_csv(project_root / paths["forecast_output"]),
         "forecast_roll": load_csv(project_root / paths["forecast_rolling_output"]),
+        "factor_exposures": load_csv(project_root / paths["factor_exposures"]),
+        "factor_rolling": load_csv(project_root / paths["factor_rolling_long"]),
+        "r2_rolling": load_csv(project_root / paths["r2_rolling_long"]),
     } 
