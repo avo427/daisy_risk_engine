@@ -12,7 +12,7 @@ def load_config(config_path=None):
         return yaml.safe_load(f)
 
 def download_price_data(tickers, start_date, end_date, use_total_returns=True):
-    raw = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', auto_adjust=False)
+    raw = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', auto_adjust=False, threads=True)
 
     if raw.empty:
         raise ValueError("Yahoo Finance download returned no data.")

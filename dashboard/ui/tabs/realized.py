@@ -115,6 +115,8 @@ def realized_tab(df_realized, df_roll, df_corr, df_vol):
             fig.update_traces(line=dict(width=1))
             fig.update_yaxes(tickformat=".2%" if "vol" in metric_key or "ret" in metric_key else ".2f")
             st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No rolling metrics available.")
     st.subheader("Correlation Matrix")
     if not df_corr.empty:
         df_corr = df_corr.copy()
@@ -158,6 +160,8 @@ def realized_tab(df_realized, df_roll, df_corr, df_vol):
             annotations=annotations
         )
         st.plotly_chart(fig, use_container_width=False)
+    else:
+        st.info("No correlation matrix available.")
     st.subheader("Volatility Contribution")
     if not df_vol.empty:
         df_vol = df_vol.iloc[:, :2]
@@ -179,4 +183,6 @@ def realized_tab(df_realized, df_roll, df_corr, df_vol):
                 x=0
             )
         )
-        st.plotly_chart(fig2, use_container_width=True) 
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("No volatility contribution data available.") 

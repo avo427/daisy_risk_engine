@@ -6,9 +6,19 @@ from pathlib import Path
 def factors_tab(project_root, paths):
     st.subheader("Latest Factor Exposures")
     weights_path = project_root / paths["portfolio_weights"]
-    df_weights = pd.read_csv(weights_path)
-    valid_tickers = set(df_weights[df_weights["Weight"] > 0]["Ticker"].str.upper())
-    valid_tickers.update(["^NDX", "^SPX", "PORTFOLIO"])
+    
+    # Check if portfolio weights file exists
+    if not weights_path.exists():
+        st.info("No portfolio weights available.")
+        return
+    
+    try:
+        df_weights = pd.read_csv(weights_path)
+        valid_tickers = set(df_weights[df_weights["Weight"] > 0]["Ticker"].str.upper())
+        valid_tickers.update(["^NDX", "^SPX", "PORTFOLIO"])
+    except Exception as e:
+        st.info("No portfolio weights available.")
+        return
     
     # Get factor exposures from session state (cached data)
     df_expo = st.session_state.get("factor_exposures", pd.DataFrame())

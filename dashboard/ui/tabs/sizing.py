@@ -115,4 +115,4 @@ def sizing_tab(project_root, paths):
         )
         st.plotly_chart(fig_contrib, use_container_width=True)
     else:
-        st.info("No volatility-based sizing output found. Run the engine to generate it.") 
+        st.info("No volatility-based sizing output found.") 

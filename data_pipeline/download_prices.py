@@ -35,7 +35,7 @@ def download_prices(config: dict) -> pd.DataFrame:
         try:
             assert isinstance(t, str), f"Ticker is not a string: {t}"
             logging.debug(f"FETCHING: Downloading: {t}")
-            data = yf.download(t, start=start, end=end, auto_adjust=False, progress=False, threads=False)
+            data = yf.download(t, start=start, end=end, auto_adjust=False, progress=False, threads=True)
 
             if data.empty:
                 logging.warning(f"WARNING: No data for {t}")
