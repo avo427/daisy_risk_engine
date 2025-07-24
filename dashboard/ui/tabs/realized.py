@@ -138,7 +138,11 @@ def realized_tab(df_realized, df_roll, df_corr, df_vol):
             ],
             colorbar=dict(title="Correlation"),
             hoverongaps=False,
-            showscale=True
+            showscale=True,
+            hovertemplate="<b>%{y}</b><br>" +
+                         "<b>%{x}</b><br>" +
+                         "Corr: %{z:.2f}<br>" +
+                         "<extra></extra>"
         ))
         annotations = []
         for i in range(len(tickers)):
@@ -172,7 +176,12 @@ def realized_tab(df_realized, df_roll, df_corr, df_vol):
             values="Vol_Contribution",
             hole=0.3
         )
-        fig2.update_traces(textinfo="percent+label")
+        fig2.update_traces(
+            textinfo="percent+label",
+            hovertemplate="<b>%{label}</b><br>" +
+                         "%{value:.2%}<br>" +
+                         "<extra></extra>"
+        )
         fig2.update_layout(
             height=600,
             legend=dict(

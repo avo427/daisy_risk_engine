@@ -2,9 +2,9 @@ user_settings:
   years: 10
   trading_days_per_year: 252
   total_returns: true
-  random_state: 33
-  monte_carlo_simulations: 50000
-  risk_free_rate: 0.045
+  random_state: 44
+  monte_carlo_simulations: 10000
+  risk_free_rate: 0.05
   starting_portfolio_value: 100000
   factor_regression_window: 60
   factor_targets:

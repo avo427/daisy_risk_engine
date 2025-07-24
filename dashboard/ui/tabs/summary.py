@@ -653,6 +653,13 @@ def display_risk_contribution_breakdown(summary):
             # Update x-axis to percentages with no decimal places
             fig.update_xaxes(tickformat='.0%')
             
+            # Update hover template to show percentage without decimal places
+            fig.update_traces(
+                hovertemplate="<b>%{y}</b><br>" +
+                             "Weight=%{x:.0%}<br>" +
+                             "<extra></extra>"
+            )
+            
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
@@ -683,7 +690,10 @@ def display_risk_contribution_breakdown(summary):
             fig.update_traces(
                 textposition='outside',
                 textinfo='label+percent',
-                pull=[0.1] * len(risk_df)  # Slight pull for better label visibility
+                pull=[0.1] * len(risk_df),  # Slight pull for better label visibility
+                hovertemplate="<b>%{label}</b><br>" +
+                             "Contribution=%{value:.0%}<br>" +
+                             "<extra></extra>"
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -758,7 +768,7 @@ def display_risk_alerts(alerts):
             with st.expander(f"{alert['category']}: {alert['message']}", expanded=True):
                 st.write(f"**Ticker:** {alert['ticker']}")
                 if 'details' in alert:
-                    st.write("**Details:**", alert['details'])
+                    display_alert_details(alert['details'], alert['category'])
     
     # Display high alerts
     if high_alerts:
@@ -767,7 +777,7 @@ def display_risk_alerts(alerts):
             with st.expander(f"{alert['category']}: {alert['message']}"):
                 st.write(f"**Ticker:** {alert['ticker']}")
                 if 'details' in alert:
-                    st.write("**Details:**", alert['details'])
+                    display_alert_details(alert['details'], alert['category'])
     
     # Display medium alerts
     if medium_alerts:
@@ -776,7 +786,32 @@ def display_risk_alerts(alerts):
             with st.expander(f"{alert['category']}: {alert['message']}"):
                 st.write(f"**Ticker:** {alert['ticker']}")
                 if 'details' in alert:
-                    st.write("**Details:**", alert['details'])
+                    display_alert_details(alert['details'], alert['category'])
+
+def display_alert_details(details, category):
+    """Display alert details in a clean format based on category"""
+    if category == 'Correlation Risk' and isinstance(details, list):
+        # Display correlation pairs in a clean table format
+        st.write("**High Correlation Pairs:**")
+        
+        # Create a DataFrame for better display
+        corr_data = []
+        for pair in details:
+            corr_data.append({
+                'Ticker 1': pair['ticker1'],
+                'Ticker 2': pair['ticker2'],
+                'Correlation': f"{pair['correlation']:.2f}"
+            })
+        
+        if corr_data:
+            corr_df = pd.DataFrame(corr_data)
+            st.dataframe(corr_df, use_container_width=True, hide_index=True)
+            
+            # Add a note about correlation interpretation
+            st.info("💡 **Note:** Correlations above 0.7 indicate high dependency between positions, which may reduce diversification benefits.")
+    else:
+        # For other types of details, display as before
+        st.write("**Details:**", details)
 
 def display_detailed_analysis(data, summary):
     """Display detailed portfolio analysis"""
