@@ -18,6 +18,8 @@ from dashboard.ui.tabs.factors import factors_tab
 from dashboard.ui.tabs.themes import themes_tab
 from dashboard.ui.tabs.prices import prices_tab
 from dashboard.ui.tabs.stress_test import stress_test_tab
+from dashboard.ui.tabs.concentration import concentration_tab
+from dashboard.ui.tabs.liquidity import liquidity_tab
 
 # === Load Config ===
 config = load_config(project_root)
@@ -49,12 +51,14 @@ df_forecast = st.session_state.get("forecast", pd.DataFrame())
 df_fore_roll = st.session_state.get("forecast_roll", pd.DataFrame())
 
 # === Simple Tab Management ===
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "Portfolio Summary", 
     "Realized Risk", 
     "Forecast Risk", 
     "Factor Exposure", 
     "Stress Testing", 
+    "Concentration Risk",
+    "Liquidity Risk",
     "Volatility-Based Sizing", 
     "Reconstructed Prices",
     "Themes & Proxies"
@@ -84,10 +88,16 @@ with tab5:
     stress_test_tab(project_root, paths)
 
 with tab6:
-    sizing_tab(project_root, paths)
+    concentration_tab(project_root, paths)
 
 with tab7:
-    prices_tab(project_root, paths)
+    liquidity_tab(project_root, paths)
 
 with tab8:
+    sizing_tab(project_root, paths)
+
+with tab9:
+    prices_tab(project_root, paths)
+
+with tab10:
     themes_tab(config, lambda c: save_config(c, project_root))

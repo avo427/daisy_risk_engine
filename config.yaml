@@ -29,6 +29,8 @@ paths:
   factor_rolling_long: data/rolling_metrics/factor_rolling_long.csv
   r2_rolling_long: data/rolling_metrics/r2_rolling_long.csv
   stress_test_output: data/stress_test_results.json
+  concentration_data: data/concentration_data.csv
+  liquidity_data: data/liquidity_data.csv
 loader:
   excel_path: ../Portfolio.xlsm
   sheet_name: Dashboard
