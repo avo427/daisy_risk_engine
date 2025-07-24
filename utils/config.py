@@ -2,12 +2,12 @@ import yaml
 from pathlib import Path
 import logging
 
-def load_config(path: str = "config.yaml") -> dict:
+def load_config(path = "config.yaml") -> dict:
     """
     Load the YAML config file with full validation and debug logging.
 
     Parameters:
-        path (str): Relative or absolute path to config.yaml or its parent directory.
+        path (str or Path): Relative or absolute path to config.yaml or its parent directory.
 
     Returns:
         dict: Parsed configuration dictionary
@@ -35,13 +35,13 @@ def load_config(path: str = "config.yaml") -> dict:
 
     return config
 
-def save_config(config: dict, path: str = "config.yaml"):
+def save_config(config: dict, path = "config.yaml"):
     """
     Save the configuration dictionary to a YAML file.
 
     Parameters:
         config (dict): Configuration dictionary to save.
-        path (str): Path to save the YAML file to.
+        path (str or Path): Path to save the YAML file to.
     """
     config_path = Path(path).resolve()
 

@@ -2,14 +2,14 @@ user_settings:
   years: 10
   trading_days_per_year: 252
   total_returns: true
-  random_state: 44
-  monte_carlo_simulations: 10000      # Number of Monte Carlo simulations
-  risk_free_rate: 0.05
+  random_state: 33
+  monte_carlo_simulations: 50000
+  risk_free_rate: 0.045
   starting_portfolio_value: 100000
-  factor_regression_window: 60        # Rolling window in days
-  factor_targets:                     # Entities to run factor regression on
-    - PORTFOLIO                       # Always include portfolio
-    - TICKERS                         # Optional: include individual tickers
+  factor_regression_window: 60
+  factor_targets:
+  - PORTFOLIO
+  - TICKERS
 paths:
   portfolio_weights: data/portfolio_weights.csv
   raw_prices_output: data/yahoo_prices.csv
@@ -104,57 +104,46 @@ ticker_themes:
   IBIT: Crypto Exposure
   SGOV: Cash Equivalent
 fallback_proxy: ^NDX
-
 factors:
   standard:
     MARKET:
-      proxy: "^NDX"
-
+      proxy: ^NDX
     VOLATILITY:
-      proxy: "^VIX"
-      transform: "pct_change"  # Use "zscore" for standardized shock indicator
-
+      proxy: ^VIX
+      transform: pct_change
     RATES:
-      proxy: "^TNX"
-      transform: "pct_change"  # Change in 10Y rate proxy
-
+      proxy: ^TNX
+      transform: pct_change
     MOMENTUM:
-      proxy: "MTUM"
-      transform: "log_return"
-
+      proxy: MTUM
+      transform: log_return
     SIZE:
-      proxy: "IWM"
-      transform: "log_return"
-
+      proxy: IWM
+      transform: log_return
     VALUE:
-      proxy: "VLUE"
-      transform: "log_return"
-
+      proxy: VLUE
+      transform: log_return
     QUALITY:
-      proxy: "QUAL"
-      transform: "log_return"
-
+      proxy: QUAL
+      transform: log_return
     MIN_VOL:
-      proxy: "SPLV"
-      transform: "log_return"
-
+      proxy: SPLV
+      transform: log_return
   thematic:
     AI:
       tickers:
-        - NVDA
-        - AVGO
-        - TSM
-        - PLTR
-      weights: "market_cap"        # Use actual market caps if available
-
+      - NVDA
+      - AVGO
+      - TSM
+      - PLTR
+      weights: market_cap
     MEME:
       tickers:
-        - GME
-        - CVNA
-        - TSLA
-        - AMC
-        - PLTR
-        - ASTS
-      weights: "equal"
-      normalize: true              # Apply z-scoring across tickers before combining
-
+      - GME
+      - CVNA
+      - TSLA
+      - AMC
+      - PLTR
+      - ASTS
+      weights: equal
+      normalize: true

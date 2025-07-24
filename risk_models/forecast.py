@@ -156,7 +156,7 @@ def compute_forecast_metrics(config_path="config.yaml"):
 
     # === Volatility-Based Sizing and Risk Contribution ===
     try:
-        forecast_df = pd.read_csv("data/forecast_metrics.csv")
+        forecast_df = pd.read_csv(config["paths"]["forecast_output"])
         forecast_df = forecast_df[forecast_df["Ticker"].isin(portfolio_tickers)]
         latest_prices = prices.ffill().iloc[-1].to_dict()
         records = []
@@ -227,9 +227,12 @@ def compute_forecast_metrics(config_path="config.yaml"):
                 })
 
         # Ensure data directory exists before saving
-        os.makedirs("data", exist_ok=True)
-        pd.DataFrame(records).to_csv("data/vol_sizing_weights_long.csv", index=False)
-        pd.DataFrame(contrib_records).to_csv("data/forecast_risk_contributions.csv", index=False)
+        vol_sizing_output_path = Path(config["paths"]["vol_sizing_output"])
+        vol_sizing_output_path.parent.mkdir(parents=True, exist_ok=True)
+        forecast_risk_output_path = Path(config["paths"]["forecast_risk_contributions"])
+        forecast_risk_output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(records).to_csv(config["paths"]["vol_sizing_output"], index=False)
+        pd.DataFrame(contrib_records).to_csv(config["paths"]["forecast_risk_contributions"], index=False)
         logging.info("SUCCESS: Volatility-based sizing and risk contribution saved.")
     except Exception as e:
         logging.warning(f"WARNING: Volatility sizing or risk contribution failed: {e}")

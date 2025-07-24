@@ -175,18 +175,19 @@ def compute_realized_metrics(config_path="config.yaml"):
             metrics_df[col] = metrics_df[col].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
 
     # Ensure data directory exists before saving
-    os.makedirs("data", exist_ok=True)
-    metrics_df.to_csv("data/realized_metrics.csv", index=False)
+    output_dir = Path(config["paths"]["realized_output"]).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metrics_df.to_csv(config["paths"]["realized_output"], index=False)
 
     # === Correlation Matrix ===
     corr = returns[portfolio_tickers].corr().round(2)
-    corr.to_csv("data/correlation_matrix.csv")
+    corr.to_csv(config["paths"]["correlation_matrix"], index=True)
 
     # === Volatility Contribution ===
     port_vol = port_ret.std()
     vol_contrib = (weights[portfolio_tickers] * returns[portfolio_tickers].std() * returns[portfolio_tickers].corrwith(port_ret)) / port_vol
     vol_contrib = vol_contrib.rename("VolatilityContribution")
-    vol_contrib.to_csv("data/vol_contribution.csv", header=True)
+    vol_contrib.to_csv(config["paths"]["vol_contribution"], header=True)
 
     # === Rolling Metrics ===
     if rolling_enabled:

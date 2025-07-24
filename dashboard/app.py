@@ -9,15 +9,15 @@ sys.path.append(str(project_root))
 
 # Import modularized components
 from utils.config import load_config, save_config
-from data_loader import load_all_data
-from ui.sidebar import render_sidebar
-from ui.tabs.realized import realized_tab
-from ui.tabs.forecast import forecast_tab
-from ui.tabs.sizing import sizing_tab
-from ui.tabs.factors import factors_tab
-from ui.tabs.themes import themes_tab
-from ui.tabs.prices import prices_tab
-from ui.tabs.stress_test import stress_test_tab
+from dashboard.data_loader import load_all_data
+from dashboard.ui.sidebar import render_sidebar
+from dashboard.ui.tabs.realized import realized_tab
+from dashboard.ui.tabs.forecast import forecast_tab
+from dashboard.ui.tabs.sizing import sizing_tab
+from dashboard.ui.tabs.factors import factors_tab
+from dashboard.ui.tabs.themes import themes_tab
+from dashboard.ui.tabs.prices import prices_tab
+from dashboard.ui.tabs.stress_test import stress_test_tab
 
 # === Load Config ===
 config = load_config(project_root)
@@ -35,7 +35,7 @@ st.title("Daisy Risk Engine Dashboard")
 
 # === Sidebar Controls ===
 with st.sidebar:
-    render_sidebar(config, lambda c: save_config(project_root, c), lambda: reload_data(), project_root, paths, user_settings)
+    render_sidebar(config, lambda c: save_config(c, project_root), lambda: reload_data(), project_root, paths, user_settings)
 
 # === Initialize session data ===
 if "realized" not in st.session_state:
@@ -49,7 +49,8 @@ df_forecast = st.session_state.get("forecast", pd.DataFrame())
 df_fore_roll = st.session_state.get("forecast_roll", pd.DataFrame())
 
 # === Simple Tab Management ===
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    "Portfolio Summary", 
     "Realized Risk", 
     "Forecast Risk", 
     "Factor Exposure", 
@@ -60,22 +61,33 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 ])
 
 with tab1:
-    realized_tab(df_realized, df_roll, df_corr, df_vol)
+    try:
+        from dashboard.ui.tabs.summary import summary_tab
+        summary_tab(project_root, paths, config)
+    except ImportError as e:
+        st.error(f"Summary tab import failed: {e}")
+        st.info("You can still use other tabs for portfolio analysis.")
+    except Exception as e:
+        st.error(f"Summary tab error: {e}")
+        st.info("You can still use other tabs for portfolio analysis.")
 
 with tab2:
-    forecast_tab(df_forecast, df_fore_roll, project_root, paths)
+    realized_tab(df_realized, df_roll, df_corr, df_vol)
 
 with tab3:
-    factors_tab(project_root, paths)
+    forecast_tab(df_forecast, df_fore_roll, project_root, paths)
 
 with tab4:
-    stress_test_tab(project_root, paths)
+    factors_tab(project_root, paths)
 
 with tab5:
-    sizing_tab(project_root, paths)
+    stress_test_tab(project_root, paths)
 
 with tab6:
-    prices_tab(project_root, paths)
+    sizing_tab(project_root, paths)
 
 with tab7:
-    themes_tab(config, lambda c: save_config(project_root, c))
+    prices_tab(project_root, paths)
+
+with tab8:
+    themes_tab(config, lambda c: save_config(c, project_root))
