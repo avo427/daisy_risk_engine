@@ -431,7 +431,7 @@ class StressTestEngine:
             }
         
         # Calculate current regime indicators
-        current_vol = self.portfolio_returns.rolling(20).std().iloc[-1] * np.sqrt(self.annual_factor)
+        current_vol = self.portfolio_returns.std() * np.sqrt(self.annual_factor)
         current_corr = self.returns.corr().mean().mean()
         current_momentum = self.portfolio_returns.rolling(60).mean().iloc[-1]
         

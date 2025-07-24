@@ -42,9 +42,77 @@ def display_comprehensive_results(results):
     scenarios_included = data_availability.get("scenarios_included", [])
     scenarios_excluded = data_availability.get("scenarios_excluded", [])
     
-    st.subheader("Comprehensive Stress Test Results")
+
+    
+    # Regime analysis with proper visualization - MOVED TO TOP
+    regime_analysis = results.get("regime_analysis", {})
+    if regime_analysis and "error" not in regime_analysis:
+        st.subheader("Market Regime Analysis")
+        
+        # Current regime
+        current_regime = regime_analysis.get("current_regime", "Unknown")
+        st.metric("Current Market Regime", current_regime.title())
+        
+        # Regime indicators
+        regime_indicators = regime_analysis.get("regime_indicators", {})
+        if regime_indicators:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                volatility = regime_indicators.get("volatility", 0)
+                st.metric("Volatility", f"{volatility:.2%}")
+            
+            with col2:
+                correlation = regime_indicators.get("correlation", 0)
+                st.metric("Correlation", f"{correlation:.3f}")
+            
+            with col3:
+                momentum = regime_indicators.get("momentum", 0)
+                st.metric("Momentum", f"{momentum:.2%}")
+            
+            # Determine regime based on triangle size (sum of normalized values)
+            triangle_size = volatility*100 + correlation*100 + momentum*100
+            
+            # Define regime thresholds and descriptions
+            if triangle_size < 60:  # Small triangle
+                regime_name = "Normal Regime"
+                regime_description = "Stable market conditions with good diversification"
+            elif triangle_size < 90:  # Medium triangle
+                regime_name = "Stress Regime"
+                regime_description = "Moderate volatility with some correlation breakdown"
+            else:  # Large triangle
+                regime_name = "Crisis Regime"
+                regime_description = "Extreme stress with diversification broken down"
+            
+            # Regime indicators radar chart
+            fig_radar = go.Figure()
+            
+            fig_radar.add_trace(go.Scatterpolar(
+                r=[volatility*100, correlation*100, momentum*100],
+                theta=['Volatility', 'Correlation', 'Momentum'],
+                fill='toself',
+                name='Current Regime',
+                hovertemplate="<b>Current Regime:</b> " + regime_name + "<br>" +
+                            "<b>Regime Meaning:</b> " + regime_description + "<br>" +
+                            "<extra></extra>"
+            ))
+            
+            fig_radar.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 40]  # Further reduced range to increase triangle area by 25%
+                    )),
+                showlegend=False,
+                title="Market Regime Indicators"
+            )
+            
+            st.plotly_chart(fig_radar, use_container_width=True)
+        
+
     
     # Data coverage summary
+    st.subheader("Stress Scenario Tests")
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Scenarios Analyzed", len(scenarios_included))
@@ -152,7 +220,13 @@ def display_comprehensive_results(results):
                     height=600,  # Increased height to avoid clipping
                     yaxis=dict(tickformat=".1%"),
                     xaxis_title="",  # Remove x-axis title
-                    showlegend=False
+                    showlegend=False,
+                    coloraxis=dict(
+                        colorbar=dict(
+                            tickformat=".1%",
+                            title="Max Drawdown (%)"
+                        )
+                    )
                 )
                 st.plotly_chart(fig_dd, use_container_width=True)
                 
@@ -177,7 +251,13 @@ def display_comprehensive_results(results):
                         height=600,  # Increased height to avoid clipping
                         yaxis=dict(tickformat=".1%"),
                         xaxis_title="",  # Remove x-axis title
-                        showlegend=False
+                        showlegend=False,
+                        coloraxis=dict(
+                            colorbar=dict(
+                                tickformat=".1%",
+                                title="Return (%)"
+                            )
+                        )
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 
@@ -198,7 +278,13 @@ def display_comprehensive_results(results):
                         height=600,  # Increased height to avoid clipping
                         yaxis=dict(tickformat=".2f"),
                         xaxis_title="",  # Remove x-axis title
-                        showlegend=False
+                        showlegend=False,
+                        coloraxis=dict(
+                            colorbar=dict(
+                                tickformat=".2f",
+                                title="Sharpe Ratio"
+                            )
+                        )
                     )
                     st.plotly_chart(fig_sharpe, use_container_width=True)
             
@@ -367,14 +453,20 @@ def display_comprehensive_results(results):
                 xaxis_title="",
                 yaxis_title="Portfolio Impact (%)",
                 height=600,
-                yaxis=dict(tickformat=".1%")
+                yaxis=dict(tickformat=".1%"),
+                coloraxis=dict(
+                    colorbar=dict(
+                        tickformat=".1%",
+                        title="Portfolio Impact (%)"
+                    )
+                )
             )
             st.plotly_chart(fig_factors, use_container_width=True)
         
         # Detailed factor results in expandable sections
         for scenario_name, scenario_results in factor_stress.items():
             if "error" not in scenario_results:
-                with st.expander(f"Factor Stress: {scenario_name}"):
+                with st.expander(f"Factor Stress: {scenario_name.replace('_', ' ')}"):
                     # Display factor impacts if available
                     factor_impact = scenario_results.get("factor_impact", {})
                     if factor_impact:
@@ -387,77 +479,55 @@ def display_comprehensive_results(results):
                             df_impact,
                             x="Factor",
                             y="Impact",
-                            title=f"Factor Impacts - {scenario_name}",
+                            title=f"Factor Impacts - {scenario_name.replace('_', ' ')}",
                             color="Impact",
-                            color_continuous_scale="RdYlGn"
+                            color_continuous_scale="RdYlGn",
+                            text=df_impact["Impact"].apply(lambda x: f"{x:.1%}")
+                        )
+                        fig_impact.update_traces(
+                            textposition='outside',
+                            hovertemplate=None,
+                            hoverinfo='skip'
+                        )
+                        
+                        # Calculate dynamic Y-axis range to prevent clipping
+                        min_impact = df_impact["Impact"].min()
+                        max_impact = df_impact["Impact"].max()
+                        y_range = max_impact - min_impact
+                        y_padding = y_range * 0.1  # 10% padding
+                        
+                        fig_impact.update_layout(
+                            yaxis=dict(
+                                tickformat=".1%",
+                                range=[min_impact - y_padding, max_impact + y_padding]
+                            ),
+                            yaxis_title="Impact (%)",
+                            height=600
                         )
                         st.plotly_chart(fig_impact, use_container_width=True)
                     
-                    # Show other results
-                    st.json(scenario_results)
+                    # Display factor composition in a consolidated table
+                    if factor_impact:
+                        st.subheader("Factor Composition")
+                        impact_table_data = []
+                        
+                        # Add individual factor rows
+                        for factor, impact in factor_impact.items():
+                            impact_table_data.append({
+                                "Factor": factor,
+                                "Impact": f"{impact:.2%}",
+                                "Shock Applied": f"{scenario_results.get('shocks', {}).get(factor, 0):.1%}"
+                            })
+                        
+                        # Add portfolio total row
+                        portfolio_impact = scenario_results.get('portfolio_impact', 0)
+                        impact_table_data.append({
+                            "Factor": "PORTFOLIO",
+                            "Impact": f"{portfolio_impact:.2%}",
+                            "Shock Applied": ""
+                        })
+                        
+                        df_impact_table = pd.DataFrame(impact_table_data)
+                        st.dataframe(df_impact_table, use_container_width=True, hide_index=True)
     
-    # Regime analysis with proper visualization
-    regime_analysis = results.get("regime_analysis", {})
-    if regime_analysis and "error" not in regime_analysis:
-        st.subheader("Market Regime Analysis")
-        
-        # Current regime
-        current_regime = regime_analysis.get("current_regime", "Unknown")
-        st.metric("Current Market Regime", current_regime.title())
-        
-        # Regime indicators
-        regime_indicators = regime_analysis.get("regime_indicators", {})
-        if regime_indicators:
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                volatility = regime_indicators.get("volatility", 0)
-                st.metric("Volatility", f"{volatility:.2%}")
-            
-            with col2:
-                correlation = regime_indicators.get("correlation", 0)
-                st.metric("Correlation", f"{correlation:.3f}")
-            
-            with col3:
-                momentum = regime_indicators.get("momentum", 0)
-                st.metric("Momentum", f"{momentum:.2%}")
-            
-            # Regime indicators radar chart
-            fig_radar = go.Figure()
-            
-            fig_radar.add_trace(go.Scatterpolar(
-                r=[volatility*100, correlation*100, momentum*100],
-                theta=['Volatility', 'Correlation', 'Momentum'],
-                fill='toself',
-                name='Current Regime'
-            ))
-            
-            fig_radar.update_layout(
-                polar=dict(
-                    radialaxis=dict(
-                        visible=True,
-                        range=[0, 100]
-                    )),
-                showlegend=False,
-                title="Market Regime Indicators"
-            )
-            
-            st.plotly_chart(fig_radar, use_container_width=True)
-        
-        # Stress scenarios for current regime
-        stress_scenarios = regime_analysis.get("stress_scenarios", {})
-        if stress_scenarios:
-            st.subheader("Regime-Specific Stress Scenarios")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                vol_multiplier = stress_scenarios.get("vol_multiplier", 1.0)
-                st.metric("Volatility Multiplier", f"{vol_multiplier:.1f}x")
-            
-            with col2:
-                correlation_impact = stress_scenarios.get("correlation_impact", 0)
-                st.metric("Correlation Impact", f"{correlation_impact:.1%}")
-        
-        # Show raw data in expandable section
-        with st.expander("Raw Regime Analysis Data"):
-            st.json(regime_analysis) 
+ 
