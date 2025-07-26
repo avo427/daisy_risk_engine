@@ -124,14 +124,17 @@ def main():
                 exposures_list.append(betas)
 
                 # === Save just the latest exposure for static output
-                latest_row = betas.iloc[-1].drop(["Date", "Ticker"])
-                for factor in latest_row.index:
-                    latest_expo.append({
-                        "Date": betas.index[-1],
-                        "Ticker": name,
-                        "Factor": factor,
-                        "Beta": latest_row[factor]
-                    })
+                if not betas.empty:
+                    latest_row = betas.iloc[-1].drop(["Date", "Ticker"])
+                    for factor in latest_row.index:
+                        latest_expo.append({
+                            "Date": betas.index[-1],
+                            "Ticker": name,
+                            "Factor": factor,
+                            "Beta": latest_row[factor]
+                        })
+                else:
+                    print(f"WARNING: No beta data available for {name}")
 
             if not r2.empty:
                 r2_df = r2.reset_index()

@@ -7,6 +7,14 @@ user_settings:
   risk_free_rate: 0.05
   starting_portfolio_value: 100000
   factor_regression_window: 60
+  volatility_sizing:
+    target_volatility: 0.2
+  cash_tickers:
+  - SGOV
+  - BIL
+  - SPRXX
+  - VMFXX
+  - SPAXX
   factor_targets:
   - PORTFOLIO
   - TICKERS

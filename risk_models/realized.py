@@ -13,13 +13,12 @@ warnings.filterwarnings("ignore", category=DataScaleWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", message=".*convergence of the optimizer.*")
 
-def load_config(path="config.yaml"):
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+from utils.config import load_config, get_risk_free_rate
 
 def compute_realized_metrics(config_path="config.yaml"):
     config = load_config(config_path)
-    rf_rate = config["user_settings"].get("risk_free_rate", 0.0)
+    # Load config values using centralized helpers
+    rf_rate = get_risk_free_rate(config)
     annual_factor = config["user_settings"].get("trading_days_per_year", 252)
     rolling_enabled = True
 

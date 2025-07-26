@@ -338,6 +338,7 @@ def display_comprehensive_results(results):
         var_cvar = monte_carlo.get("var_cvar", {})
         if var_cvar:
             st.subheader("Risk Metrics (VaR/CVaR)")
+            st.caption("**Time Horizon: 252 days (1 year) using EGARCH**")
             
             # Create VaR/CVaR chart
             var_data = []
@@ -366,13 +367,13 @@ def display_comprehensive_results(results):
                     metric = row["Metric"]
                     value = row["Value"]
                     if "VaR_95" in metric:
-                        tooltip = f"95% confidence that portfolio losses won't exceed {value:.1%}"
+                        tooltip = f"95% confidence that annual portfolio losses won't exceed {value:.1%}"
                     elif "CVaR_95" in metric:
-                        tooltip = f"Average loss when the worst 5% of scenarios occur: {value:.1%}"
+                        tooltip = f"Average annual loss when the worst 5% of scenarios occur: {value:.1%}"
                     elif "VaR_99" in metric:
-                        tooltip = f"99% confidence that portfolio losses won't exceed {value:.1%}"
+                        tooltip = f"99% confidence that annual portfolio losses won't exceed {value:.1%}"
                     elif "CVaR_99" in metric:
-                        tooltip = f"Average loss when the worst 1% of scenarios occur: {value:.1%}"
+                        tooltip = f"Average annual loss when the worst 1% of scenarios occur: {value:.1%}"
                     else:
                         tooltip = f"{row['Metric_Display']}: {value:.1%}"
                     tooltips.append(tooltip)
@@ -381,7 +382,7 @@ def display_comprehensive_results(results):
                     df_var,
                     x="Metric_Display",
                     y="Value",
-                    title="Value at Risk (VaR) and Conditional VaR (CVaR)",
+                    title="Annual Value at Risk (VaR) and Conditional VaR (CVaR) - 252 Days",
                     text=df_var["Value"].apply(lambda x: f"{x:.2%}")
                 )
                 fig_var.update_traces(

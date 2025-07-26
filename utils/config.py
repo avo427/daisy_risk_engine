@@ -53,3 +53,11 @@ def save_config(config: dict, path = "config.yaml"):
         yaml.dump(config, f, sort_keys=False)
 
     logging.info(f"SUCCESS: Saved config to {config_path}")
+
+def get_risk_free_rate(config):
+    """Get risk-free rate from config (returns decimal format)"""
+    return config["user_settings"].get("risk_free_rate", 0.0)
+
+def get_target_volatility(config):
+    """Get target volatility from config (returns decimal format)"""
+    return config["user_settings"].get("volatility_sizing", {}).get("target_volatility", 0.20)

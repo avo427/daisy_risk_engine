@@ -147,12 +147,20 @@ def reconstruct_price_series(ticker, series, proxy_series, proxy_returns, fallba
     real_sources = pd.Series("REAL", index=real_series.index)
 
     # DEBUG: Check for jumps at transition
-    if len(backfilled.dropna()) > 0:
-        last_reconstructed = backfilled.dropna().iloc[-1]
+    backfilled_clean = backfilled.dropna()
+    if len(backfilled_clean) > 0 and len(real_series) > 0:
+        last_reconstructed = backfilled_clean.iloc[-1]
         first_actual = real_series.iloc[0]
-        jump_pct = abs(last_reconstructed - first_actual) / first_actual
-        if jump_pct > 0.05:  # 5% jump
-            logging.warning(f"DEBUG: {ticker} - Large jump at transition: {last_reconstructed:.2f} -> {first_actual:.2f} ({jump_pct*100:.2f}%)")
+        if first_actual != 0:  # Prevent division by zero
+            jump_pct = abs(last_reconstructed - first_actual) / first_actual
+            if jump_pct > 0.05:  # 5% jump
+                logging.warning(f"DEBUG: {ticker} - Large jump at transition: {last_reconstructed:.2f} -> {first_actual:.2f} ({jump_pct*100:.2f}%)")
+        else:
+            logging.warning(f"DEBUG: {ticker} - First actual price is zero, skipping jump calculation")
+    elif len(backfilled_clean) == 0:
+        logging.debug(f"DEBUG: {ticker} - No reconstructed data available for jump check")
+    elif len(real_series) == 0:
+        logging.warning(f"DEBUG: {ticker} - No real data available for jump check")
 
     return pd.concat([backfilled.sort_index(), real_series]), pd.concat([sources.sort_index(), real_sources])
 

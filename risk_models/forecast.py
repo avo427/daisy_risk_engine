@@ -14,18 +14,19 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 warnings.filterwarnings("ignore", message=".*Inequality constraints incompatible.*")
 warnings.filterwarnings("ignore", message=".*Positive directional derivative for linesearch.*")
 
-def load_config(path="config.yaml"):
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+from utils.config import load_config, get_risk_free_rate, get_target_volatility
 
 def directional_floor(x):
     return np.floor(x) if x > 0 else np.ceil(x)
 
 def compute_forecast_metrics(config_path="config.yaml"):
     config = load_config(config_path)
-    rf_rate = config["user_settings"].get("risk_free_rate", 0.0)
+    # Load config values using centralized helpers
+    rf_rate = get_risk_free_rate(config)
     annual_factor = config["user_settings"].get("trading_days_per_year", 252)
     random_state = config["user_settings"].get("random_state", 42)
+    target_volatility = get_target_volatility(config)
+    cash_tickers = config["user_settings"].get("cash_tickers", ["SGOV", "BIL", "SPRXX", "VMFXX", "SPAXX"])
     np.random.seed(random_state)
 
     prices = pd.read_csv(config["paths"]["recon_prices_output"], index_col=0, parse_dates=True).dropna(how="all")
@@ -56,9 +57,16 @@ def compute_forecast_metrics(config_path="config.yaml"):
 
         for w in ewma_windows:
             try:
-                vol = r.ewm(span=w, adjust=False).std().iloc[-1] * np.sqrt(annual_factor)
-                row[f"EWMA_{w}D"] = vol
-            except Exception:
+                if len(r) > 0:
+                    vol = r.ewm(span=w, adjust=False).std().iloc[-1] * np.sqrt(annual_factor)
+                    row[f"EWMA_{w}D"] = vol
+                else:
+                    row[f"EWMA_{w}D"] = np.nan
+            except (IndexError, ValueError) as e:
+                logging.warning(f"WARNING: EWMA calculation failed for {t} with window {w}: {e}")
+                row[f"EWMA_{w}D"] = np.nan
+            except Exception as e:
+                logging.warning(f"WARNING: Unexpected error in EWMA calculation for {t}: {e}")
                 row[f"EWMA_{w}D"] = np.nan
 
         try:
@@ -96,8 +104,15 @@ def compute_forecast_metrics(config_path="config.yaml"):
 
     for w in ewma_windows:
         try:
-            port_row[f"EWMA_{w}D"] = port_ret.ewm(span=w, adjust=False).std().iloc[-1] * np.sqrt(annual_factor)
-        except Exception:
+            if len(port_ret) > 0:
+                port_row[f"EWMA_{w}D"] = port_ret.ewm(span=w, adjust=False).std().iloc[-1] * np.sqrt(annual_factor)
+            else:
+                port_row[f"EWMA_{w}D"] = np.nan
+        except (IndexError, ValueError) as e:
+            logging.warning(f"WARNING: Portfolio EWMA calculation failed with window {w}: {e}")
+            port_row[f"EWMA_{w}D"] = np.nan
+        except Exception as e:
+            logging.warning(f"WARNING: Unexpected error in portfolio EWMA calculation: {e}")
             port_row[f"EWMA_{w}D"] = np.nan
 
     try:
@@ -158,50 +173,239 @@ def compute_forecast_metrics(config_path="config.yaml"):
     try:
         forecast_df = pd.read_csv(config["paths"]["forecast_output"])
         forecast_df = forecast_df[forecast_df["Ticker"].isin(portfolio_tickers)]
-        latest_prices = prices.ffill().iloc[-1].to_dict()
+        
+        # Safe access to latest prices
+        if len(prices) > 0:
+            latest_prices = prices.ffill().iloc[-1].to_dict()
+        else:
+            logging.warning("WARNING: No price data available for volatility sizing")
+            latest_prices = {}
+        
+        # Load correlation matrix for enhanced risk parity
+        corr_matrix = pd.read_csv(config["paths"]["correlation_matrix"], index_col=0)
+        
         records = []
         contrib_records = []
         vol_models = ["EWMA (5D)", "EWMA (20D)", "Garch Volatility", "E-Garch Volatility"]
 
         for model in vol_models:
-            sizing_tmp = []
+            # === AQR-STYLE RISK PARITY IMPLEMENTATION (EXCLUDING CASH) ===
+            # Step 1: Separate cash and risky assets
+            cash_tickers_in_portfolio = [t for t in portfolio_tickers if t in cash_tickers]
+            risky_tickers_in_portfolio = [t for t in portfolio_tickers if t not in cash_tickers]
+            
+            # Calculate cash allocation (preserve current cash allocation)
+            cash_allocation = sum([market_values[t] for t in cash_tickers_in_portfolio])
+            risky_capital = total_value - cash_allocation
+            
+            # Step 2: Calculate TRUE portfolio risk contributions for RISKY ASSETS ONLY
+            current_risk_data = []
+            
+            # First pass: collect all risky assets and their volatilities
+            risky_assets = {}
             for _, row in forecast_df.iterrows():
                 ticker = row["Ticker"]
-                base_weight = market_values[ticker] / total_value
+                
+                # Skip cash tickers - they don't participate in risk parity
+                if ticker in cash_tickers:
+                    continue
+                    
+                current_weight = market_values[ticker] / total_value
                 try:
                     forecast_vol = float(str(row[model]).strip('%')) / 100
                 except:
                     forecast_vol = np.nan
                 if not np.isfinite(forecast_vol) or forecast_vol <= 0:
                     continue
+                
+                risky_assets[ticker] = {
+                    'weight': current_weight,
+                    'volatility': forecast_vol,
+                    'returns': returns[ticker] if ticker in returns.columns else None
+                }
+            
+            # Calculate correlations between all risky assets
+            correlations = {}
+            for ticker1 in risky_assets:
+                correlations[ticker1] = {}
+                for ticker2 in risky_assets:
+                    if (risky_assets[ticker1]['returns'] is not None and 
+                        risky_assets[ticker2]['returns'] is not None):
+                        corr = risky_assets[ticker1]['returns'].corr(risky_assets[ticker2]['returns'])
+                        correlations[ticker1][ticker2] = corr if not pd.isna(corr) else 0.0
+                    else:
+                        correlations[ticker1][ticker2] = 0.0
+            
+            # Calculate TRUE risk contributions using proper formula
+            total_risky_risk = 0
+            for ticker in risky_assets:
+                weight = risky_assets[ticker]['weight']
+                vol = risky_assets[ticker]['volatility']
+                
+                # Risk contribution = weight * volatility * Σ(weight_j * volatility_j * correlation_ij)
+                risk_contribution = 0
+                for ticker2 in risky_assets:
+                    weight2 = risky_assets[ticker2]['weight']
+                    vol2 = risky_assets[ticker2]['volatility']
+                    corr = correlations[ticker][ticker2]
+                    risk_contribution += weight * vol * weight2 * vol2 * corr
+                
+                current_risk_data.append((ticker, weight, vol, risk_contribution))
+                total_risky_risk += risk_contribution
+            
+            # Step 3: Calculate target risk parity weights using iterative approach
+            n_risky_positions = len(current_risk_data)
+            if n_risky_positions > 0:
+                # Build covariance matrix
+                tickers_list = list(risky_assets.keys())
+                n_assets = len(tickers_list)
+                cov_matrix = np.zeros((n_assets, n_assets))
+                
+                for i, ticker1 in enumerate(tickers_list):
+                    for j, ticker2 in enumerate(tickers_list):
+                        vol1 = risky_assets[ticker1]['volatility']
+                        vol2 = risky_assets[ticker2]['volatility']
+                        corr = correlations[ticker1][ticker2]
+                        cov_matrix[i, j] = vol1 * vol2 * corr
+                
+                # Risk parity using iterative algorithm (AQR methodology)
+                try:
+                    # Initialize with equal weights
+                    weights = np.ones(n_assets) / n_assets
+                    max_iter = 100
+                    tolerance = 1e-6
+                    
+                    for iteration in range(max_iter):
+                        # Calculate current risk contributions
+                        risk_contributions = np.zeros(n_assets)
+                        for i in range(n_assets):
+                            for j in range(n_assets):
+                                risk_contributions[i] += weights[i] * weights[j] * cov_matrix[i, j]
+                        
+                        # Check if risk contributions are equal (within tolerance)
+                        if np.max(risk_contributions) - np.min(risk_contributions) < tolerance:
+                            break
+                        
+                        # Update weights inversely proportional to risk contributions
+                        # This is the core of the iterative risk parity algorithm
+                        new_weights = weights / np.sqrt(risk_contributions)
+                        new_weights = new_weights / np.sum(new_weights)
+                        
+                        # Apply bounds (30% position limit)
+                        new_weights = np.clip(new_weights, 0, 0.30)
+                        new_weights = new_weights / np.sum(new_weights)
+                        
+                        weights = new_weights
+                    
+                    risk_parity_weights_normalized = weights
+                    
+                    # Create normalized weights list
+                    normalized_weights = []
+                    for i, ticker in enumerate(tickers_list):
+                        current_weight = risky_assets[ticker]['weight']
+                        forecast_vol = risky_assets[ticker]['volatility']
+                        risk_parity_weight = risk_parity_weights_normalized[i]
+                        
+                        # Calculate current risk contribution using actual weights
+                        current_risk_contribution = 0
+                        for j, ticker2 in enumerate(tickers_list):
+                            current_weight2 = risky_assets[tickers_list[j]]['weight']
+                            current_risk_contribution += current_weight * current_weight2 * cov_matrix[i, j]
+                        
+                        # Calculate target risk contribution using risk parity weights
+                        target_risk_contribution = 0
+                        for j, ticker2 in enumerate(tickers_list):
+                            weight2 = risk_parity_weights_normalized[j]
+                            target_risk_contribution += risk_parity_weight * weight2 * cov_matrix[i, j]
+                        
+                        normalized_weights.append((ticker, current_weight, forecast_vol, current_risk_contribution, risk_parity_weight, target_risk_contribution))
+                    
+                    # Convert risk contributions to percentages
+                    total_current_risk = sum(contrib for _, _, _, contrib, _, _ in normalized_weights)
+                    total_target_risk = sum(contrib for _, _, _, _, _, contrib in normalized_weights)
+                    
+                    if total_current_risk > 0 and total_target_risk > 0:
+                        normalized_weights = [
+                            (ticker, current_weight, forecast_vol, 
+                             current_risk_contribution / total_current_risk,
+                             risk_parity_weight, 
+                             target_risk_contribution / total_target_risk)
+                            for ticker, current_weight, forecast_vol, current_risk_contribution, risk_parity_weight, target_risk_contribution in normalized_weights
+                        ]
+                        
+                except np.linalg.LinAlgError:
+                    # Fallback to equal weights if matrix is singular
+                    normalized_weights = []
+                    for ticker in tickers_list:
+                        current_weight = risky_assets[ticker]['weight']
+                        forecast_vol = risky_assets[ticker]['volatility']
+                        risk_parity_weight = 1.0 / n_assets
+                        current_risk_contribution = 0  # Will be calculated later
+                        target_risk_contribution = 0   # Will be calculated later
+                        normalized_weights.append((ticker, current_weight, forecast_vol, current_risk_contribution, risk_parity_weight, target_risk_contribution))
+            else:
+                normalized_weights = []
 
-                vol_adj_weight = base_weight * 0.20 / forecast_vol
-                sizing_tmp.append((ticker, base_weight, forecast_vol, vol_adj_weight))
-
-            total_vol_weight = sum([x[3] for x in sizing_tmp])
-
-            for ticker, base_weight, forecast_vol, vol_adj_weight in sizing_tmp:
-                weight_norm = vol_adj_weight / total_vol_weight
+            # Step 5: Calculate target positions and deltas
+            for ticker, current_weight, forecast_vol, current_risk_contribution, risk_parity_weight, target_risk_contribution in normalized_weights:
                 price = latest_prices.get(ticker, np.nan)
                 if not np.isfinite(price) or price <= 0:
                     continue
                 current_dollar = market_values[ticker]
-                target_dollar = weight_norm * total_value
+                # Risk parity weight applies to risky_capital, not total_value
+                target_dollar = risk_parity_weight * risky_capital
                 delta_dollar = target_dollar - current_dollar
                 delta_shares = directional_floor(delta_dollar / price)
+
+                # Calculate correlation with portfolio for display
+                portfolio_correlation = 0.0
+                if ticker in correlations:
+                    # Calculate weighted average correlation with all other assets
+                    total_weight = 0
+                    weighted_corr = 0
+                    for ticker2 in correlations[ticker]:
+                        if ticker2 != ticker:
+                            weight2 = risky_assets[ticker2]['weight']
+                            weighted_corr += weight2 * correlations[ticker][ticker2]
+                            total_weight += weight2
+                    portfolio_correlation = weighted_corr / total_weight if total_weight > 0 else 0.0
 
                 records.append({
                     "Ticker": ticker,
                     "Model": model,
                     "ForecastVol": forecast_vol,
-                    "BaseWeight": base_weight,
-                    "VolAdjWeight": weight_norm,
+                    "BaseWeight": current_weight,
+                    "RiskParityWeight": risk_parity_weight,
                     "CurrentDollar": current_dollar,
                     "TargetDollar": target_dollar,
                     "DeltaDollar": delta_dollar,
                     "Price": price,
-                    "DeltaShares": delta_shares
+                    "DeltaShares": delta_shares,
+                    "CurrentRiskContribution": current_risk_contribution,
+                    "TargetRiskContribution": target_risk_contribution,
+                    "CorrelationFactor": portfolio_correlation
                 })
+            
+            # Add cash tickers with preserved allocation (no risk parity applied)
+            for ticker in cash_tickers_in_portfolio:
+                if ticker in market_values and market_values[ticker] > 0:
+                    current_dollar = market_values[ticker]
+                    price = latest_prices.get(ticker, np.nan)
+                    
+                    records.append({
+                        "Ticker": ticker,
+                        "Model": model,
+                        "ForecastVol": 0.001,  # Near-zero volatility for cash
+                        "BaseWeight": current_dollar / total_value,
+                        "RiskParityWeight": current_dollar / total_value,  # Preserve current weight
+                        "CurrentDollar": current_dollar,
+                        "TargetDollar": current_dollar,  # No change to cash allocation
+                        "DeltaDollar": 0,  # No rebalancing needed
+                        "Price": price,
+                        "DeltaShares": 0,  # No shares to buy/sell
+                        "CurrentRiskContribution": 0,  # Cash has no risk contribution
+                        "TargetRiskContribution": 0  # Cash has no target risk contribution
+                    })
 
             actual_contribs = []
             total_risk = 0
@@ -258,9 +462,10 @@ def compute_forecast_metrics(config_path="config.yaml"):
                 for h in horizons:
                     # === EWMA ===
                     try:
-                        lambda_ = 2 / (h + 1)
-                        ewma_vol = window_returns.ewm(alpha=lambda_, adjust=False).std().iloc[-1] * np.sqrt(h)
-                        vol_records.append({
+                        if len(window_returns) > 0:
+                            lambda_ = 2 / (h + 1)
+                            ewma_vol = window_returns.ewm(alpha=lambda_, adjust=False).std().iloc[-1] * np.sqrt(h)
+                            vol_records.append({
                             "Date": date,
                             "Ticker": t,
                             "Model": "EWMA",
@@ -311,17 +516,22 @@ def compute_forecast_metrics(config_path="config.yaml"):
 
                 for h in horizons:
                     try:
-                        lambda_ = 2 / (h + 1)
-                        ewma_vol = window_returns.ewm(alpha=lambda_, adjust=False).std().iloc[-1] * np.sqrt(h)
-                        vol_records.append({
-                            "Date": date,
-                            "Ticker": "PORTFOLIO",
-                            "Model": "EWMA",
-                            "Time Frame": h,
-                            "Value": ewma_vol
-                        })
-                        portfolio_rows += 1
-                    except:
+                        if len(window_returns) > 0:
+                            lambda_ = 2 / (h + 1)
+                            ewma_vol = window_returns.ewm(alpha=lambda_, adjust=False).std().iloc[-1] * np.sqrt(h)
+                            vol_records.append({
+                                "Date": date,
+                                "Ticker": "PORTFOLIO",
+                                "Model": "EWMA",
+                                "Time Frame": h,
+                                "Value": ewma_vol
+                            })
+                            portfolio_rows += 1
+                    except (IndexError, ValueError) as e:
+                        logging.debug(f"Portfolio EWMA calculation failed for horizon {h}: {e}")
+                        continue
+                    except Exception as e:
+                        logging.warning(f"Unexpected error in portfolio EWMA calculation: {e}")
                         continue
 
                     try:

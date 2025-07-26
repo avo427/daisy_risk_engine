@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
 import json
+from utils.config import get_risk_free_rate
 
 warnings.filterwarnings("ignore")
 
@@ -30,7 +31,8 @@ class StressTestEngine:
     
     def __init__(self, config_path="config.yaml"):
         self.config = self._load_config(config_path)
-        self.rf_rate = self.config["user_settings"].get("risk_free_rate", 0.05)
+        # Load config values using centralized helpers
+        self.rf_rate = get_risk_free_rate(self.config)
         self.annual_factor = self.config["user_settings"].get("trading_days_per_year", 252)
         self.random_state = self.config["user_settings"].get("random_state", 44)
         np.random.seed(self.random_state)
@@ -248,7 +250,13 @@ class StressTestEngine:
     def monte_carlo_stress_test(self, n_simulations=None, time_horizon=252, 
                                confidence_levels=[0.95, 0.99, 0.995]):
         """
-        Monte Carlo stress testing with fat-tailed distributions.
+        Monte Carlo stress testing using EGARCH-t model for sophisticated volatility modeling.
+        
+        Features:
+        - EGARCH(1,1) with Student's t-distribution for fat tails
+        - Volatility clustering and leverage effects
+        - Fallback to fitted t-distribution if EGARCH fails
+        - Conservative normal distribution as final fallback
         
         Args:
             n_simulations: Number of Monte Carlo simulations (defaults to config value)
@@ -290,35 +298,93 @@ class StressTestEngine:
         if sigma > 0.1:  # More than 10% daily volatility
             logging.warning(f"Unusually high volatility: {sigma:.4f}")
         
-        # Fit t-distribution for fat tails
+        # Fit EGARCH-t model for sophisticated volatility modeling
         try:
-            df, loc, scale = t.fit(returns_clean)
+            from arch import arch_model
             
-            # Validate fitted parameters
-            if df < 1 or df > 100:
-                logging.warning(f"Unusual degrees of freedom: {df:.2f}, using normal distribution")
-                df, loc, scale = 30, mu, sigma  # Fallback to reasonable values
-                
+            # Prepare returns for EGARCH fitting (multiply by 100 for percentage)
+            returns_for_garch = returns_clean * 100
+            
+            # Fit EGARCH(1,1) with Student's t-distribution
+            egarch_model = arch_model(
+                returns_for_garch, 
+                vol='EGARCH', 
+                p=1, q=1, 
+                dist='t',
+                rescale=True
+            )
+            
+            # Fit the model
+            egarch_fit = egarch_model.fit(disp='off', show_warning=False)
+            
+            # Extract fitted parameters
+            params = egarch_fit.params
+            omega = params['omega']
+            alpha = params['alpha[1]']
+            gamma = params['gamma[1]']
+            beta = params['beta[1]']
+            nu = params['nu']  # degrees of freedom for t-distribution
+            
+            # Validate parameters are reasonable
+            if not (0 < nu < 30):
+                logging.warning(f"Unusual degrees of freedom: {nu:.2f}, capping at 30")
+                nu = min(max(nu, 3), 30)
+            
+            logging.info(f"EGARCH-t parameters: omega={omega:.6f}, alpha={alpha:.6f}, gamma={gamma:.6f}, beta={beta:.6f}, nu={nu:.2f}")
+            
+            # Get the last conditional volatility for simulation initialization
+            last_vol = np.sqrt(egarch_fit.conditional_volatility.iloc[-1]) / 100  # Convert back to decimal
+            
         except Exception as e:
-            logging.warning(f"T-distribution fitting failed: {e}, using normal distribution")
-            df, loc, scale = 30, mu, sigma  # Fallback to reasonable values
+            logging.warning(f"EGARCH-t fitting failed: {e}, falling back to t-distribution")
+            # Fallback to t-distribution with fitted parameters
+            try:
+                from scipy.stats import t
+                df, loc, scale = t.fit(returns_clean)
+                if df < 3 or df > 30:
+                    df = min(max(df, 3), 30)
+                logging.info(f"Using t-distribution: df={df:.2f}, loc={loc:.6f}, scale={scale:.6f}")
+                egarch_fit = None
+                last_vol = scale
+            except:
+                logging.warning("T-distribution fitting also failed, using conservative normal")
+                egarch_fit = None
+                last_vol = sigma
         
-        # Generate simulations with validation
+        # Generate simulations using EGARCH-t or fallback model
         simulations = []
         for i in range(n_simulations):
-            # Use t-distribution for fat-tailed returns
-            daily_returns = t.rvs(df, loc=loc, scale=scale, size=time_horizon)
+            if egarch_fit is not None:
+                # Use EGARCH-t for sophisticated volatility modeling
+                daily_returns = []
+                current_vol = last_vol
+                
+                for t in range(time_horizon):
+                    # Generate innovation from t-distribution
+                    innovation = t.rvs(nu) * current_vol
+                    
+                    # Apply EGARCH volatility equation
+                    log_vol_sq = omega + alpha * (innovation / current_vol) + gamma * abs(innovation / current_vol) + beta * np.log(current_vol**2)
+                    current_vol = np.sqrt(np.exp(log_vol_sq))
+                    
+                    # Add mean component
+                    daily_return = mu + innovation
+                    daily_returns.append(daily_return)
+                
+                daily_returns = np.array(daily_returns)
+                
+            else:
+                # Fallback to fitted t-distribution or normal
+                if 'df' in locals():
+                    daily_returns = t.rvs(df, loc=loc, scale=scale, size=time_horizon)
+                else:
+                    daily_returns = np.random.normal(mu, last_vol, time_horizon)
             
-            # Validate daily returns are reasonable
-            if np.any(np.abs(daily_returns) > 1.0):  # More than 100% daily return
-                daily_returns = np.clip(daily_returns, -0.5, 0.5)  # Cap at 50%
-            
+            # Calculate cumulative return
             cumulative_return = np.prod(1 + daily_returns) - 1
             
-            # Validate cumulative return is reasonable
-            if abs(cumulative_return) > 10.0:  # More than 1000% cumulative return
-                logging.warning(f"Extreme cumulative return in simulation {i}: {cumulative_return:.4f}")
-                cumulative_return = np.clip(cumulative_return, -5.0, 5.0)  # Cap at 500%
+            # Apply reasonable bounds (less aggressive than before)
+            cumulative_return = np.clip(cumulative_return, -0.95, 5.0)  # Cap at -95% to +500%
             
             simulations.append(cumulative_return)
         
