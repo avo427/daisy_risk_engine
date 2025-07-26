@@ -7,13 +7,16 @@ from sklearn.metrics import mean_absolute_error, r2_score
 
 def prices_tab(project_root, paths):
     st.subheader("Reconstructed Prices Viewer")
-    recon_path   = project_root / paths["recon_prices_output"]
+    recon_path = project_root / paths["recon_prices_output"]
     weights_path = project_root / paths["portfolio_weights"]
-    yahoo_path   = project_root / paths["raw_prices_output"]
+    yahoo_path = project_root / paths["raw_prices_output"]
+    
     if recon_path.exists() and weights_path.exists() and yahoo_path.exists():
         df_prices = pd.read_csv(recon_path, index_col=0, parse_dates=True)
         df_weights = pd.read_csv(weights_path)
         df_yahoo = pd.read_csv(yahoo_path, index_col=0, parse_dates=True)
+        
+        # Calculate IPO dates
         ipo_dates = {}
         for ticker in df_yahoo.columns.intersection(df_prices.columns):
             yahoo_series = df_yahoo[ticker].dropna()
@@ -26,10 +29,12 @@ def prices_tab(project_root, paths):
                     ipo_dates[ticker] = None
             else:
                 ipo_dates[ticker] = None
-        ipo_dates = pd.Series(ipo_dates)
+        
+        # Get available tickers
         tickers = df_weights[df_weights["Weight"] > 0]["Ticker"].tolist()
         tickers += ["^NDX", "^SPX"]
         tickers = sorted(set(t for t in tickers if t in df_prices.columns))
+        
         if not tickers:
             st.warning("No valid tickers found in reconstructed prices.")
         else:
@@ -38,8 +43,10 @@ def prices_tab(project_root, paths):
             ipo_date = ipo_dates.get(selected_ticker)
             fallback_date = df_yahoo.index[0]
             use_ipo = ipo_date if isinstance(ipo_date, pd.Timestamp) else fallback_date
+            
             recon_part = price_series[price_series.index < use_ipo]
             actual_part = price_series[price_series.index >= use_ipo]
+            
             fig = go.Figure()
             if not recon_part.empty:
                 fig.add_trace(go.Scatter(
@@ -57,10 +64,12 @@ def prices_tab(project_root, paths):
                     name='Actual Price',
                     line=dict(color='#5dade2')
                 ))
+            
             max_date = price_series.idxmax()
             max_value = price_series.max()
             min_date = price_series.idxmin()
             min_value = price_series.min()
+            
             fig.add_trace(go.Scatter(
                 x=[max_date], y=[max_value],
                 mode='markers+text',
@@ -81,6 +90,7 @@ def prices_tab(project_root, paths):
                 textposition="bottom center",
                 showlegend=False
             ))
+            
             fig.update_layout(
                 title=f"{selected_ticker} Reconstructed vs Actual Price",
                 xaxis_title="Date",
@@ -91,10 +101,13 @@ def prices_tab(project_root, paths):
                 legend=dict(font=dict(size=14))
             )
             st.plotly_chart(fig, use_container_width=True)
+            
+            # Validation section
             st.subheader("Validation Check: Reconstructed vs Yahoo Prices")
             tickers_to_check = set(df_weights[df_weights["Weight"] > 0]["Ticker"].tolist() + ["^NDX", "^SPX"])
             filtered_tickers = df_yahoo.columns.intersection(df_prices.columns).intersection(tickers_to_check)
             validation_data = []
+            
             for ticker in sorted(filtered_tickers):
                 ipo = ipo_dates.get(ticker)
                 if ipo is None:
@@ -120,6 +133,7 @@ def prices_tab(project_root, paths):
                     "R2 Score": f"{r2:.2f}" if pd.notnull(r2) else "",
                     "Status": "SUCCESS" if mismatches == 0 else "ERROR"
                 })
+            
             if validation_data:
                 df_valid = pd.DataFrame(validation_data).sort_values("Ticker").set_index("Ticker")
                 row_height = 38
@@ -127,12 +141,15 @@ def prices_tab(project_root, paths):
                 st.dataframe(df_valid, use_container_width=True, height=table_height)
             else:
                 st.info("No valid tickers found to validate.")
+            
+            # Source attribution section
             st.subheader("Source Attribution by Ticker")
             sources_path = project_root / paths["recon_sources_output"]
             if sources_path.exists():
                 df_sources = pd.read_csv(sources_path, index_col=0, parse_dates=True)
                 valid_tickers = df_weights[df_weights["Weight"] > 0]["Ticker"].unique()
                 df_sources = df_sources[df_sources.columns.intersection(valid_tickers)]
+                
                 def format_ranges(series):
                     series = series.dropna()
                     if series.empty:
@@ -157,6 +174,7 @@ def prices_tab(project_root, paths):
                         else:
                             result.append(f"{range_start.strftime('%Y-%m-%d')} to {prev_date.strftime('%Y-%m-%d')}")
                     return ", ".join(result)
+                
                 summary_data = []
                 for ticker in df_sources.columns:
                     s = df_sources[ticker]
@@ -164,7 +182,7 @@ def prices_tab(project_root, paths):
                         "Ticker": ticker,
                         "REAL": format_ranges(s[s == "REAL"]),
                         "PROXY": format_ranges(s[s == "PROXY"]),
-                        "GARCH": format_ranges(s[s == "GARCH"])
+                        "FALLBACK": format_ranges(s[s == "FALLBACK"])
                     }
                     summary_data.append(usage)
                 df_summary = pd.DataFrame(summary_data).set_index("Ticker")

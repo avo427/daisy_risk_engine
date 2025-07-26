@@ -185,9 +185,15 @@ def compute_realized_metrics(config_path="config.yaml"):
 
     # === Volatility Contribution ===
     port_vol = port_ret.std()
-    vol_contrib = (weights[portfolio_tickers] * returns[portfolio_tickers].std() * returns[portfolio_tickers].corrwith(port_ret)) / port_vol
-    vol_contrib = vol_contrib.rename("VolatilityContribution")
-    vol_contrib.to_csv(config["paths"]["vol_contribution"], header=True)
+    # Handle division by zero in volatility contribution calculation
+    if port_vol > 0:
+        vol_contrib = (weights[portfolio_tickers] * returns[portfolio_tickers].std() * returns[portfolio_tickers].corrwith(port_ret)) / port_vol
+        vol_contrib = vol_contrib.rename("VolatilityContribution")
+        vol_contrib.to_csv(config["paths"]["vol_contribution"], header=True)
+    else:
+        logging.warning("WARNING: Portfolio volatility is zero, skipping volatility contribution calculation")
+        # Create empty volatility contribution file
+        pd.Series(dtype=float).to_csv(config["paths"]["vol_contribution"], header=True)
 
     # === Rolling Metrics ===
     if rolling_enabled:
@@ -209,7 +215,16 @@ def compute_realized_metrics(config_path="config.yaml"):
 
                 vol_roll = r.rolling(window).std() * np.sqrt(annual_factor / window)
                 ret_roll = r.rolling(window).apply(lambda x: np.exp(np.log1p(x).sum()) - 1, raw=True)
-                sharpe_roll = (r.rolling(window).mean() - rf_rate / 252) / r.rolling(window).std()
+                
+                # Handle division by zero in Sharpe ratio calculation
+                rolling_std = r.rolling(window).std()
+                rolling_mean = r.rolling(window).mean()
+                sharpe_roll = pd.Series(index=r.index, dtype=float)
+                
+                # Only calculate Sharpe where standard deviation is non-zero
+                valid_sharpe = rolling_std > 0
+                sharpe_roll[valid_sharpe] = (rolling_mean[valid_sharpe] - rf_rate / 252) / rolling_std[valid_sharpe]
+                sharpe_roll[~valid_sharpe] = np.nan  # Set to NaN where std is zero
 
                 valid_idx = vol_roll.dropna().index
                 for date in valid_idx:

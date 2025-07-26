@@ -12,7 +12,8 @@ def load_config(config_path=None):
         return yaml.safe_load(f)
 
 def download_price_data(tickers, start_date, end_date, use_total_returns=True):
-    raw = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', auto_adjust=False, threads=True)
+    # Remove threads=True to avoid race conditions and rate limiting issues
+    raw = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', auto_adjust=False, threads=False)
 
     if raw.empty:
         raise ValueError("Yahoo Finance download returned no data.")
@@ -37,6 +38,10 @@ def download_price_data(tickers, start_date, end_date, use_total_returns=True):
     if skipped:
         print(f"WARNING: Skipped {len(skipped)} tickers: {', '.join(skipped)}")
 
+    # Validate that we actually collected some data
+    if not collected:
+        raise ValueError("No price data was successfully collected. Check your ticker symbols and internet connection.")
+
     df = pd.DataFrame(collected)
     return df.ffill().bfill()
 
@@ -58,7 +63,12 @@ def build_standard_factors(factor_config, price_data):
             factor_returns[name] = prices.pct_change()
         elif transform == 'zscore':
             rolling = prices.rolling(60)
-            factor_returns[name] = (prices - rolling.mean()) / rolling.std()
+            rolling_std = rolling.std()
+            # Handle division by zero in zscore calculation
+            if rolling_std.min() == 0:
+                print(f"WARNING: Skipping {name}: constant price series (zero standard deviation)")
+                continue
+            factor_returns[name] = (prices - rolling.mean()) / rolling_std
 
     return pd.DataFrame(factor_returns)
 
@@ -76,7 +86,13 @@ def build_thematic_factors(theme_config, price_data, market_caps=None):
         weights = np.ones(len(available)) / len(available)
         if weights_mode == 'market_cap' and market_caps:
             weights = np.array([market_caps.get(tk, 1) for tk in available])
-            weights /= weights.sum()
+            weights_sum = weights.sum()
+            # Handle division by zero in weight normalization
+            if weights_sum > 0:
+                weights /= weights_sum
+            else:
+                print(f"WARNING: Skipping {theme}: zero market cap sum, using equal weights")
+                weights = np.ones(len(available)) / len(available)
 
         returns = price_data[available].pct_change()
         thematic_returns[theme] = (returns @ weights)
